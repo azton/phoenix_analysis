@@ -18,7 +18,7 @@ yt.add_particle_filter('p3_stars',function=_p3stars, requires=['creation_time', 
 
 # p3 SN remnants
 def _p3remnant(pfilter, data):
-    return (data['creation_time'] > 0) & (data['particle_type'] == 5) & (data['particle_mass'].to('Msun') < 1)
+    return (data['creation_time'] > 0) & (data['particle_type'] == 5) & (data['particle_mass'].to('Msun') < 1e-5)
 yt.add_particle_filter('sne_remnant',function=_p3remnant, requires=['creation_time', 'particle_type', 'particle_mass'])
 
 # p3 BH remnants
@@ -33,7 +33,7 @@ def add_filters(ds):
 
 def get_redshift(ds, t):
     tstart = ds.cosmology.t_from_z(ds.parameters['CosmologyInitialRedshift'])
-    znow = ds.cosmology.z_from_t(tstart+t)
+    znow = ds.cosmology.z_from_t(float(tstart)+t)
     return znow
 '''
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -41,15 +41,16 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
-    sim = sys.argv[1]
-    output = sys.argv[2]
-    sim_root = '/scratch3/06429/azton/phoenix'
+    sim = sys.argv[2]
+    output = int(sys.argv[3])
+    sim_root = sys.argv[1]
     starfile = '%s/starfile.json'%sim
 
+    ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
+    ds = add_filters(ds)
     if not os.path.exists(starfile):
         # load output, get star list. compile m*(t) and dm/dt.  save txt file that has stars and thier quantities.
-        ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
-        ds = ds.add_filters(ds)
+
         ad = ds.all_data()
 
         stardict = {}
@@ -76,36 +77,47 @@ def main():
 
         os.makedirs(sim, exist_ok=True)
         with open(starfile, 'w') as f:
-            json.dump(stardict, starfile, indent=4)
+            json.dump(stardict, f, indent=4)
     else:
-        stardict = {}
         with open(starfile, 'r') as f:
-            json.load(f, stardict)    
+            stardict = json.load(f)    
     # M*(t)
   
-    tend = ds.current_time.to("Myr")
-    tstart = ds.cosmology.t_from_z(ds.parameters['CosmologyInitialRedshift'])
+    tend = float(max(stardict['birth']))
+    tstart = float(min(stardict['birth']))
   
     # bins for time
     tbins = np.linspace(tstart, tend, 100)
-    dt = (t[1] - t[0])*1e6 #yr
-    mbins = np.zeros_like(tbins)
+    dt = (tbins[1] - tbins[0])*1e6 #yr
+    mbins = np.zeros(101)
+    nbins = np.zeros(101)
     for i, t in enumerate(stardict['birth']):
-        tbin = np.digitize(t, tbins)
-        mbins[i] += stardict['mass'][i]
-
-    dmdt = (mbins[1:] - mbins[:-1]) / dt
-
-    fig, ax = plt.subplots(2,1, figsize=(3,6), sharex=True)
-    ax[0].set_ylabel('SFR [M* yr$^{-1}$]')
-    ax[1].set_ylabel('M*')
-    ax[1].set_xlabel('t [Myr]')
-    tdmdt = t[1:]
-    ax[0].plot(t[dmdt != 0], dmdt[dmdt != 0])
-    ax[1].plot(t, mbins)
+        if stardict['mass'][i] <= 300:
+            tbin = np.digitize(t, tbins)
+            mbins[tbin] += stardict['mass'][i]
+            nbins[tbin] += 1
+    print(np.unique(mbins))
+    cnum = np.array([nbins[:i].sum() for i in range(len(nbins))])
+    cmass = np.array([mbins[:i].sum() for i in range(len(mbins))])
+    dmdt = np.array([(cmass[i] - cmass[i-1])/dt for i in range(1,len(cmass))]) / float(ds.parameters['CosmologyComovingBoxSize'])**3
     
+    
+    fig, ax = plt.subplots(3,1, sharex=True, figsize=(5.5,8))
+    tdmdt = tbins
+    ax[0].plot(tdmdt, dmdt)
+    ax[1].plot(tbins, cmass[1:]/ float(ds.parameters['CosmologyComovingBoxSize'])**3)
+    ax[2].plot(tbins, cnum[1:]/ float(ds.parameters['CosmologyComovingBoxSize'])**3)
+    ax[0].set_yscale('log')
+    ax[1].set_yscale('log')
+    ax[2].set_yscale('log')
+
+    ax[0].set_ylabel('SFR [M$_\odot$ yr$^{-1}$ Mpc$^{-3}$]')
+    ax[1].set_ylabel('M* [M$_\odot$ Mpc$^{-3}$]')
+    ax[2].set_ylabel('N* Mpc$^{-3}$')
+    ax[2].set_xlabel('t [Myr]')
 
 
+    plt.savefig('P3_SFR_%s.pdf'%sim, bbox_inches='tight')
 
 
     
