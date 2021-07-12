@@ -13,18 +13,27 @@ import matplotlib.pyplot as plt
 
 # active p3 stars
 def _p3stars(pfilter, data):
-    return (data['creation_time'] > 0) & (data['particle_type'] == 5) & (data['particle_mass'].to('Msun') > 1)
-yt.add_particle_filter('p3_stars',function=_p3stars, requires=['creation_time', 'particle_type', 'particle_mass'])
+    return (data['creation_time'] > 0)\
+            & (data['particle_type'] == 5) \
+            & (data['particle_mass'].to('Msun') > 1)
+yt.add_particle_filter('p3_stars',function=_p3stars, 
+                        requires=['creation_time', 'particle_type', 'particle_mass'])
 
 # p3 SN remnants
 def _p3remnant(pfilter, data):
-    return (data['creation_time'] > 0) & (data['particle_type'] == 5) & (data['particle_mass'].to('Msun') < 1e-5)
-yt.add_particle_filter('sne_remnant',function=_p3remnant, requires=['creation_time', 'particle_type', 'particle_mass'])
+    return (data['creation_time'] > 0) \
+            & (data['particle_type'] == 5) \
+            & (data['particle_mass'].to('Msun') < 1e-5)
+yt.add_particle_filter('sne_remnant',function=_p3remnant, 
+                        requires=['creation_time', 'particle_type', 'particle_mass'])
 
 # p3 BH remnants
 def _p3bh(pfilter, data):
-    return (data['creation_time'] > 0) & (data['particle_type'] == 1) & (data['particle_mass'].to('Msun') > 1)
-yt.add_particle_filter('p3_bh',function=_p3bh, requires=['creation_time', 'particle_type', 'particle_mass'])
+    return (data['creation_time'] > 0) \
+                & (data['particle_type'] == 1) \
+                & (data['particle_mass'].to('Msun') > 1)
+yt.add_particle_filter('p3_bh',function=_p3bh, 
+                        requires=['creation_time', 'particle_type', 'particle_mass'])
 
 def add_filters(ds):
     for filter in ['p3_stars','sne_remnant','p3_bh']:
@@ -32,8 +41,8 @@ def add_filters(ds):
     return ds
 
 def get_redshift(ds, t):
-    tstart = ds.cosmology.t_from_z(ds.parameters['CosmologyInitialRedshift'])
-    znow = ds.cosmology.z_from_t(float(tstart)+t)
+    # tstart = ds.cosmology.t_from_z(ds.parameters['CosmologyInitialRedshift'])
+    znow = ds.cosmology.z_from_t(t)
     return znow
 '''
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -41,10 +50,11 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
+    datadest = '/mnt/c/Users/azton/Projects/phoenix_analysis'
     sim = sys.argv[2]
     output = int(sys.argv[3])
     sim_root = sys.argv[1]
-    starfile = '%s/starfile.json'%sim
+    starfile = '%s/%s/RD%04d_p3-starfile.json'%(datadest, sim, d)
 
     ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
     ds = add_filters(ds)
@@ -73,7 +83,7 @@ def main():
                 stardict['birth'].append(float(ad[stype, 'creation_time'][i].to('Myr')))
                 stardict['metallicity'].append(float(ad[stype, 'metallicity_fraction'][i]))
                 stardict['z_birth'].append(float(get_redshift(ds, stardict['birth'][-1])))
-                stardict['lifetime'].append(float(ad[stype, 'creation_time'][i].to('Myr')))
+                stardict['lifetime'].append(float(ad[stype, 'dynamical_time'][i].to('Myr')))
 
         os.makedirs(sim, exist_ok=True)
         with open(starfile, 'w') as f:
@@ -101,23 +111,26 @@ def main():
     cmass = np.array([mbins[:i].sum() for i in range(len(mbins))])
     dmdt = np.array([(cmass[i] - cmass[i-1])/dt for i in range(1,len(cmass))]) / float(ds.parameters['CosmologyComovingBoxSize'])**3
     
-    
-    fig, ax = plt.subplots(3,1, sharex=True, figsize=(5.5,8))
+    print(dmdt)
+    tbins = tbins.max() - tbins # alter to lookback time
+    fig, ax = plt.subplots(3,1, figsize=(5.5,8))
     tdmdt = tbins
     ax[0].plot(tdmdt, dmdt)
+    # axy.set_xlim(zdmdt[-1], zdmdt[0]) # reverse the axis so high z is to left
     ax[1].plot(tbins, cmass[1:]/ float(ds.parameters['CosmologyComovingBoxSize'])**3)
     ax[2].plot(tbins, cnum[1:]/ float(ds.parameters['CosmologyComovingBoxSize'])**3)
     ax[0].set_yscale('log')
     ax[1].set_yscale('log')
     ax[2].set_yscale('log')
-
+        
     ax[0].set_ylabel('SFR [M$_\odot$ yr$^{-1}$ Mpc$^{-3}$]')
-    ax[1].set_ylabel('M* [M$_\odot$ Mpc$^{-3}$]')
-    ax[2].set_ylabel('N* Mpc$^{-3}$')
-    ax[2].set_xlabel('t [Myr]')
-
-
-    plt.savefig('P3_SFR_%s.pdf'%sim, bbox_inches='tight')
+    ax[1].set_ylabel('M*$_{\\rm total}$ [M$_\odot$ Mpc$^{-3}$]')
+    ax[2].set_ylabel('N*$_{\\rm total}$ Mpc$^{-3}$')
+    ax[2].set_xlabel('Lookback Time [Myr]')
+    ax[0].set_xticks([])
+    ax[1].set_xticks([])
+    plt.subplots_adjust(hspace=0)
+    plt.savefig('%s/P3_SFR_%s_RD%04d.pdf'%(datadest, sim, output), bbox_inches='tight')
 
 
     
