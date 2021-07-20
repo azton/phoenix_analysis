@@ -6,11 +6,11 @@ import yt
 
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.02
-yt.add_field(('gas','sum_metallicity'), function=_sum_metallicity, units = 'Zsun')
+yt.add_field(('gas','sum_metallicity'), function=_sum_metallicity, units = 'Zsun', sampling_type='cell')
 
 def _p3_metallicity(field, data):
     return (data['SN_Colour'] / data['Density']) / 0.02
-yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun')
+yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun', sampling_type='cell')
 
 
 def _p3_stars(pfilter,data): # active Pop 3 stars

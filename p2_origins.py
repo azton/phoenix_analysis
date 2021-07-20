@@ -55,7 +55,7 @@ def find_correct_output(ds, t):
         ret_outs.append(out)
     return ret_outs
 
-def _stars(pfilter,data): # only returns SNe stars 
+def _stars(pfilter,data): # only returns SNe stars, includes P3 stars that havent "formed" yet with low mass, get rid of those. 
     return ((data['all','particle_type'] == 5) \
         & (data['all','creation_time'] > 0)\
         & (data['all','particle_mass'].to('Msun') < 1))
