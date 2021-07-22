@@ -210,7 +210,7 @@ def main():
                             enr_relations['enrichee_pidx'].append(int(pid))
                             enr_relations['enricher_pidx'].append(int(p3id))
                             enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
-                            enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx]))
+                            enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
                             enr_relations['formation_dt'].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
                             enr_relations['sne_dt'].append(float(ctime-p3SN))
                             enr_relations['enricher_mean_z'].append(float(ray['p3_metallicity'].mean()))
