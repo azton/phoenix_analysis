@@ -58,7 +58,8 @@ def find_correct_output(ds, t):
 def _stars(pfilter,data): # only returns SNe stars, includes P3 stars that havent "formed" yet with low mass, get rid of those. 
     return ((data['all','particle_type'] == 5) \
         & (data['all','creation_time'] > 0)\
-        & (data['all','particle_mass'].to('Msun') < 1))
+        & (data['all','particle_mass'].to('Msun') < 1)
+        & (data['all','particle_mass'].to('Msun')*1e20 < 300))
 yt.add_particle_filter('stars',function=_stars, \
         requires=['particle_type','particle_mass','creation_time'], filtered_type='all')
 
@@ -78,9 +79,10 @@ def main():
     # paths and destinations
     sim = sys.argv[1]
     final_out = int(sys.argv[2])
+    path_root = '/scratch3/06429/azton/'
     init_out = 200 if '-1' in sim else 100
-    simpath = '/expanse/lustre/scratch/azton/temp_project/phoenix'
-    img_dest = '/expanse/lustre/scratch/azton/temp_project/phoenix_analysis'
+    simpath = '%s/phoenix'%path_root
+    img_dest = '%s/phoenix_analysis'%path_root
     data_dest = img_dest+'/%s/p2_origins/rays'%sim
     img_dest += '/%s/p2_origins/img'%sim
     os.makedirs(img_dest, exist_ok=True)
@@ -159,7 +161,7 @@ def main():
                 ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
                 p2r = ds.quan(500, 'pc').to('unitary')
                 sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
-                if (sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum()) <= 1e-5 * 0.012950: # only analyze if region seems to not have ongoing prior p2 star formation
+                if (sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum()) <= 5e-5 * 0.012950: # only analyze if region seems to not have ongoing prior p2 star formation
                     print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
                     r = ds.quan(200, 'kpccm').to('unitary')
                     sp = ds.sphere(p2c, r)
@@ -210,7 +212,7 @@ def main():
                             enr_relations['enrichee_pidx'].append(int(pid))
                             enr_relations['enricher_pidx'].append(int(p3id))
                             enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
-                            enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx]))
+                            enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
                             enr_relations['formation_dt'].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
                             enr_relations['sne_dt'].append(float(ctime-p3SN))
                             enr_relations['enricher_mean_z'].append(float(ray['p3_metallicity'].mean()))
