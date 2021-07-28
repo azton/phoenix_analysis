@@ -21,7 +21,7 @@ import yt, os, sys, json
 # from trident import LightRay
 import numpy as np
 from mpi4py import MPI
-
+from argparse import ArgumentParser as ap
 
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.012950
@@ -75,16 +75,30 @@ def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
+ 
+ 
+    argparser = ap()
+    argparser.add_argument('--sim', type=str, default=None, 
+                        help="simulation name")
+    argparser.add_argument('--sim_root', '-sr', type=str, default=None,
+                        help="file path to simulation directory")
+    argparser.add_argument('--output_dest','-od', type=str, default='./p2_origins',
+                        help='Destination for analysis logs and other output.')
+    argparser.add_argument('--outputs', type=int, nargs='+', default=None,
+                        help="white-space separated list of dumps to analyze")
+    args = argparser.parse_args()
 
+    if not os.path.exists(args.output_dest):
+        os.makedirs(args.output_dest, exist_ok = True)
     # paths and destinations
-    sim = sys.argv[1]
-    final_out = int(sys.argv[2])
-    path_root = '/scratch3/06429/azton/'
-    init_out = 200 if '-1' in sim else 100
-    simpath = '%s/phoenix'%path_root
-    img_dest = '%s/phoenix_analysis'%path_root
-    data_dest = img_dest+'/%s/p2_origins/rays'%sim
-    img_dest += '/%s/p2_origins/img'%sim
+    
+    sim = args.sim
+    final_out = args.outputs[1]
+    init_out = args.outputs[0]
+    simpath = args.sim_root
+    img_dest = args.output_dest
+    data_dest = img_dest+'/%s/rays'%sim
+    img_dest += '/%s/img'%sim
     os.makedirs(img_dest, exist_ok=True)
     os.makedirs(data_dest, exist_ok=True)
     if rank == 0:
@@ -161,7 +175,7 @@ def main():
                 ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
                 p2r = ds.quan(500, 'pc').to('unitary')
                 sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
-                if (sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum()) <= 5e-5 * 0.012950: # only analyze if region seems to not have ongoing prior p2 star formation
+                if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum())).to('Zsun') <= 5e-5: # only analyze if region seems to not have ongoing prior p2 star formation
                     print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
                     r = ds.quan(200, 'kpccm').to('unitary')
                     sp = ds.sphere(p2c, r)
