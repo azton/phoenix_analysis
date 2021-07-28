@@ -143,8 +143,6 @@ for i, outpath in enumerate(localdspaths):
             p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=labels)
             p2.set_unit('radius','kpccm')
             p2.save('radial_plots/%s/plots/%d'%(simname, pidx))
-            if not os.path.exists('radial_plots/%s'%simname):
-                os.makedirs('radial_plots/%s'%simname, exist_ok = True)
             with open('radial_plots/%s/%02d_size-regionlog.json'%(simname, rank), 'w') as f:
                 json.dump(profile_stat, f, indent = 4)
         
