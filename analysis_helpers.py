@@ -20,6 +20,13 @@ def _p3_stars(pfilter,data): # active Pop 3 stars
 yt.add_particle_filter('p3_stars',function=_p3_stars, \
         requires=['particle_type','particle_mass','creation_time'], filtered_type='all')
 
+def _new_p3_stars(pfilter, data):
+    return data['p3_stars','age'].to('Myr') < 0.2
+yt.add_particle_filter('new_p3_stars',function=_new_p3_stars, \
+        requires=['age'], filtered_type='p3_stars')
+
+
+
 def _all_p3(pfilter, data): # all p3 particles, past and present
     # return all present and SNr | blackhole collapses.
     return ((data['all','particle_type'] == 5) \
@@ -33,10 +40,17 @@ yt.add_particle_filter('all_p3',function=_all_p3, \
 def _snr(pfilter, data): # supernovae remnants
     return ((data['all','particle_type'] == 5) \
         & (data['all','creation_time'] > 0)\
-        & (data['all','particle_mass'].to('Msun') < 1))
+        & (data['all','particle_mass'].to('Msun') < 1)\
+        & (data['all','particle_mass'].to('Msun') * 1e20 < 300))
 yt.add_particle_filter('snr',function=_snr, \
         requires=['particle_type','particle_mass','creation_time'], filtered_type='all')
 
+def _bh(pfilter, data):
+    return (data['all','particle_type'] == 1)\
+        & (data['all','creation_time'] > 0)\
+        & (data['all','particle_mass'].to('Msun') > 1)
+yt.add_particle_filter('p3_bh',function=_bh, \
+        requires=['particle_type','particle_mass','creation_time'], filtered_type='all')
 
 def _p2(pfilter, data):
     return (data['all','particle_type'] == 7) & (data['all','creation_time'] > 0)
@@ -73,6 +87,12 @@ def find_correct_output(ds, t):
     return ret_outs
 
 def add_particle_filters(ds):
-    for filter in ['new_p2_stars','p2_stars','snr','p3_stars', 'all_p3']:
+    for filter in ['new_p2_stars',
+                    'p2_stars',
+                    'snr',
+                    'p3_stars', 
+                    'all_p3', 
+                    'new_p3_stars',
+                    'p3_bh']:
         ds.add_particle_filter(filter)
     return ds
