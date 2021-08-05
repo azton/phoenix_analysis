@@ -16,7 +16,7 @@ from mpi4py import MPI
 import numpy as np
 from argparse import ArgumentParser as ap
 import matplotlib.pyplot as plt
-from analysis_helpers import *
+from analysis_helpers import add_particle_filters
 
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.01295
@@ -25,8 +25,8 @@ def _sum_metallicity(field, data):
 def _p3_metallicity(field, data):
     return (data['SN_Colour'] / data['Density']) / 0.01295
 # yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun', sampling_type='cell')
-argparser = ap()
 
+argparser = ap()
 argparser.add_argument('--sim', type=str, default=None, 
                     help="simulation name")
 argparser.add_argument('--sim_root', '-sr', type=str, default=None,
@@ -130,7 +130,7 @@ for i, d in enumerate(outputs):
         save_mass = np.array([p.field_data[('gas','cell_mass')] for p in profiles])
         save_metal = np.array([p.x for p in profiles])
         save_hmass = np.array(labels)
-        metal_profiles.create_dataset('mass',data=save_mass)
+        metal_profiles.create_dataset('mass', data=save_mass)
         metal_profiles.create_dataset('metallicity', data=save_metal)
         metal_profiles.create_dataset('halo_mass', data=save_hmass)
         metal_profiles.close()

@@ -15,6 +15,9 @@ from mpi4py import MPI
 
 from analysis_helpers import *
 
+def _ion_frac(pfilter, data):
+    return data['gas','H_p1_number_density'] / (data['gas','H_p0_number_density'] + data['gas','H_p1_number_density'])
+yt.add_field(('gas','ionized_fraction'), function=_ion_frac, units = None, sampling_type='cell')
 
 argparser = ap()
 
@@ -26,6 +29,8 @@ argparser.add_argument('--output_dest','-od', type=str, default='./enriched_stat
                     help='Destination for analysis logs and other output.')
 argparser.add_argument('--outputs', type=int, nargs='+', default=None,
                     help="white-space separated list of dumps to analyze")
+argparser.add_argument('--output_skip', type=float, default=1,
+                    help='number to skip between analyzed outputs')
 args = argparser.parse_args()
 
 if not os.path.exists(args.output_dest):
@@ -34,7 +39,7 @@ if not os.path.exists(args.output_dest):
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-
+args.outputs = np.arange(min(args.outputs), max(args.outputs)+1, args.output_skip)
 localinds = np.arange(rank, len(args.outputs), size)
 
 outputs = [args.outputs[i] for i in localinds]
@@ -43,9 +48,10 @@ volstat = {}
 volstat['f_enr'] = []
 volstat['p3_f_enr'] = []
 volstat['f_enr_od'] = {}
-ods = np.linspace(10, 1000, 4)
+ods = [1, 10, 100, 500, 700, 1000]
 for od in ods:
     volstat['f_enr_od'][od] = []
+volstat['f_enr_od']['<1'] = []
 volstat['f_enr_high'] = {}
 mets = np.logspace(np.log10(5.5e-8), -2, 10)
 for zc in mets:
@@ -72,15 +78,22 @@ for d in outputs:
         fenr = ad['gas','cell_volume'][ad['sum_metallicity'] > z_crit].sum().to('pc**3') / vtot
         p3_fenr = ad['gas','cell_volume'][ad['p3_metallicity'] > z_crit].sum().to('pc**3') / vtot
         for k in volstat['f_enr_od']:
-            vhigh = ad['gas','cell_volume'][ad['gas','overdensity'] > k].sum().to('pc**3')
-            fenrod = ad['gas','cell_volume'][(ad['sum_metallicity'] > z_crit) & (ad['overdensity'] > k)].sum().to('pc**3') / vhigh
-            volstat['f_enr_od'][k].append(float(fenrod))
+            if type(k) != str:
+                vhigh = ad['gas','cell_volume'][ad['gas','overdensity'] > k].sum().to('pc**3')
+                fenrod = ad['gas','cell_volume'][(ad['sum_metallicity'] > z_crit) & (ad['overdensity'] > k)].sum().to('pc**3') / vhigh
+                volstat['f_enr_od'][k].append(float(fenrod))
+            else:
+                vhigh = ad['gas','cell_volume'][ad['gas','overdensity'] < 1].sum().to('pc**3')
+                fenrod = ad['gas','cell_volume'][(ad['sum_metallicity'] > z_crit) & (ad['overdensity'] < 1)].sum().to('pc**3') / vhigh
+                volstat['f_enr_od']['<1'].append(float(fenrod))
+
+
         for k in volstat['f_enr_high']:
-            fenrhigh = ad['gas','cell_volume'][ad['sum_metallicity'] > 10**k].sum().to('pc**3') / vtot
+            fenrhigh = ad['gas','cell_volume'][ad['sum_metallicity'] > k].sum().to('pc**3') / vtot
             volstat['f_enr_high'][k].append(float(fenrhigh))
         for k in volstat['ion_frac']:
-            ion_frac = ad['H_p1_density'] / (ad['H_p0_density'] + ad['H_p1_density'])
-            ionvol = ad['gas','cell_volume'][ion_frac < k].sum().to('pc**3') / vtot
+            # ion_frac = ad['H_p1_density'] / (ad['H_p0_density'] + ad['H_p1_density'])
+            ionvol = ad['gas','cell_volume'][ad['gas','ionized_fraction'] > k].sum().to('pc**3') / vtot
             volstat['ion_frac'][k].append(float(ionvol))
         # log
         volstat['p3_f_enr'].append(float(p3_fenr))

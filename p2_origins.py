@@ -127,21 +127,25 @@ def main():
         with open(comp_output_log, 'w') as f:
             f.write('#\n')
     
-    enr_relations = {}
+    if os.path.exists('%s/%s/%03d_p2_origin_qtys.json'%(args.output_dest, args.sim, rank)):
+        with open('%s/%s/%03d_p2_origin_qtys.json'%(args.output_dest, args.sim, rank), 'r') as f:
+            enr_relations = json.load(f)
+    else:
+        enr_relations = {}
 
-    enr_relations['enrichee_pidx']      = []
-    enr_relations['enricher_pidx']      = []
-    enr_relations['enricher_mass']      = {} # list of enriching masses keyed by the pid they enriched
-    enr_relations['enrichee_metal']     = []
-    enr_relations['formation_dt']       = []
-    enr_relations['sne_dt']             = []
-    enr_relations['enricher_mean_z']    = []
-    enr_relations['enricher_min_z']     = []
-    enr_relations['enricher_max_z']     = []
-    enr_relations['distance']           = {}
-    
-    # log for pop3 stars: how many p2-stars enrichment events are they causally connected to?
-    enr_relations['p3_stats'] = {}
+        enr_relations['enrichee_pidx']      = []
+        enr_relations['enricher_pidx']      = []
+        enr_relations['enricher_mass']      = {} # list of enriching masses keyed by the pid they enriched
+        enr_relations['enrichee_metal']     = []
+        enr_relations['formation_dt']       = {}
+        enr_relations['sne_dt']             = {}
+        enr_relations['enricher_mean_z']    = {}
+        enr_relations['enricher_min_z']     = {}
+        enr_relations['enricher_max_z']     = {}
+        enr_relations['distance']           = {}
+        
+        # log for pop3 stars: how many p2-stars enrichment events are they causally connected to?
+        enr_relations['p3_stats'] = {}
 
 
     # if rank == 0:
@@ -187,14 +191,19 @@ def main():
                     p3 = np.array(sp['stars','particle_index'])
                     enr_relations['enricher_mass'][int(pid)] = []
                     enr_relations['distance'][int(pid)] = []
+                    enr_relations['formation_dt'][int(pid)]        = []
+                    enr_relations['sne_dt'][int(pid)]              = []
+                    enr_relations['enricher_mean_z'][int(pid)]     = []
+                    enr_relations['enricher_min_z'][int(pid)]      = []
+                    enr_relations['enricher_max_z'][int(pid)]      = []
 
-                    prj = yt.ProjectionPlot(ds,'z', ['density', 'p3_metallicity'],weight_field='density',
-                                            center = p2c, width = r)
-                    prj.set_cmap('density','cividis')
-                    prj.set_cmap('p3_metallicity','cividis')
-                    prj.set_zlim('p3_metallicity',1e-10, 1)
-                    prj.annotate_marker(p2c, marker='*',plot_args={'color':'cyan'})
-                    print('Annotating %d p3 stars in volume for %d'%(len(p3), pid))
+                    # prj = yt.ProjectionPlot(ds,'z', ['density', 'p3_metallicity'],weight_field='density',
+                    #                         center = p2c, width = r)
+                    # prj.set_cmap('density','cividis')
+                    # prj.set_cmap('p3_metallicity','cividis')
+                    # prj.set_zlim('p3_metallicity',1e-10, 1)
+                    # prj.annotate_marker(p2c, marker='*',plot_args={'color':'cyan'})
+                    # print('Annotating %d p3 stars in volume for %d'%(len(p3), pid))
                     r = ds.quan(1e-8, 'unitary')
                     for j, p3id in enumerate(p3):
                         p3pos = sp['stars','particle_position'][j].to('unitary')
@@ -203,7 +212,7 @@ def main():
                         
                         ray_start = p2c
                         ray_end = p3pos
-                        prj.annotate_marker(p3pos, marker='*', plot_args={'color':'lime'})
+                        # prj.annotate_marker(p3pos, marker='*', plot_args={'color':'lime'})
                         # rayfile = "%s/%d_%d.h5"%(data_dest, pid, p3id)
                         ray =ds.r[ray_start:ray_end]   
                         # f = h5py.File(rayfile, 'r')
@@ -217,27 +226,28 @@ def main():
                             # (indicating the region has been enriched 
                             # and this isnt a first-formation event)
                         '''
-                        if np.all(ray['gas','p3_metallicity'] > 5e-5):
+                        if np.all(ray['gas','p3_metallicity'] > 5e-5) and p3SN < ctime:
                             if rp3p2 > r:
                                 r = rp3p2
-                            prj.annotate_ray(ray, arrow=True, plot_args={'color':'tab:orange'})
-                            prj.annotate_text(p3pos, "%0.1f; %0.1f"%(ctime - sp['stars','creation_time'][j].to('Myr'), ctime - p3SN))
+                            # prj.annotate_ray(ray, arrow=True, plot_args={'color':'tab:orange'})
+                            # prj.annotate_text(p3pos, "%0.1f; %0.1f"%(ctime - sp['stars','creation_time'][j].to('Myr'), ctime - p3SN))
                             # log enrichers info
                             enr_relations['enrichee_pidx'].append(int(pid))
                             enr_relations['enricher_pidx'].append(int(p3id))
                             enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
                             enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
-                            enr_relations['formation_dt'].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
-                            enr_relations['sne_dt'].append(float(ctime-p3SN))
-                            enr_relations['enricher_mean_z'].append(float(ray['p3_metallicity'].mean()))
-                            enr_relations['enricher_min_z'].append(float(ray['p3_metallicity'].min()))
-                            enr_relations['enricher_max_z'].append(float(ray['p3_metallicity'].max()))
+                            enr_relations['formation_dt'][int(pid)].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
+                            enr_relations['sne_dt'][int(pid)].append(float(ctime-p3SN))
+                            enr_relations['enricher_mean_z'][int(pid)].append(float(ray['p3_metallicity'].mean()))
+                            enr_relations['enricher_min_z'][int(pid)].append(float(ray['p3_metallicity'].min()))
+                            enr_relations['enricher_max_z'][int(pid)].append(float(ray['p3_metallicity'].max()))
                             enr_relations['distance'][int(pid)].append(float(rp3p2.to('pc')))
 
                             if p3id in enr_relations['p3_stats'].keys() and r: # add to this p3 star stats
                                 enr_relations['p3_stats'][p3id]['n_enriched'] += 1
                                 enr_relations['p3_stats'][p3id]['r_enriched'] += [float(rp3p2.to('pc'))]
                                 enr_relations['p3_stats'][p3id]['m_enriched'] += float(ad['new_p2_stars', 'particle_mass'][idx].to('Msun'))
+                                enr_relations['p3_stats'][p3id]['dt_snr'] += [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
                             elif r: # create a slot for this p3 star
                                 enr_relations['p3_stats'][p3id] = {}
                                 enr_relations['p3_stats'][p3id]['m_enriched'] = \
@@ -245,19 +255,20 @@ def main():
                                 enr_relations['p3_stats'][p3id]['mass'] =  float(sp['stars','particle_mass'][j].to('Msun'))*1e20
                                 enr_relations['p3_stats'][p3id]['n_enriched'] = 1
                                 enr_relations['p3_stats'][p3id]['r_enriched'] = [float(rp3p2.to('pc'))]
-                        else:
-                            prj.annotate_ray(ray, arrow=True, plot_args={'color':'white'})
+                                enr_relations['p3_stats'][p3id]['dt_snr'] = [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
+                        # else:
+                        #     prj.annotate_ray(ray, arrow=True, plot_args={'color':'white'})
                     if not r:
                         continue    
-                    prj.set_width(4*rp3p2)
-                    prj.set_antialias(True)
-                    prj.set_figure_size(16)
-                    prj.annotate_title('$R_{max}$ = %0.2f pc '%(r.to('pc')))
-                    prj.set_axes_unit('kpc')
-                    prj.save('%s/%d'%(img_dest, pid), suffix='png')
+                    # prj.set_width(4*rp3p2)
+                    # prj.set_antialias(True)
+                    # prj.set_figure_size(16)
+                    # prj.annotate_title('$R_{max}$ = %0.2f pc '%(r.to('pc')))
+                    # prj.set_axes_unit('kpc')
+                    # prj.save('%s/%d'%(img_dest, pid), suffix='png')
                     # exit()
                     # write the file after each star--one file for each rank, cuz... sigh
-                    with open('%s/%03d_p2_origin_qtys.json'%(sim, rank),'w') as f:
+                    with open('%s/%s/%03d_p2_origin_qtys.json'%(args.output_dest, args.sim, rank),'w') as f:
                         json.dump(enr_relations, f, indent=4)
             else:
                 print('Region metallicity too high: %s'%dspath)
