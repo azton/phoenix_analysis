@@ -34,11 +34,11 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
-    datadest = '/mnt/c/Users/azton/Projects/phoenix_analysis'
+    datadest = 'C:/Users/azton/Projects/phoenix_analysis'
     sim = sys.argv[2]
     output = int(sys.argv[3])
     sim_root = sys.argv[1]
-    starfile = '%s/%s/RD%04d-p2_starfile.json'%(datadest, sim, output)
+    starfile = '%s/%s/RD%04d_p2_starfile.json'%(datadest, sim, output)
 
     ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
     ds = add_filters(ds)

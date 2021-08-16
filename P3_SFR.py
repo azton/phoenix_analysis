@@ -13,25 +13,26 @@ import matplotlib.pyplot as plt
 
 # active p3 stars
 def _p3stars(pfilter, data):
-    return (data['creation_time'] > 0)\
-            & (data['particle_type'] == 5) \
-            & (data['particle_mass'].to('Msun') > 1)
+    return (data['all', 'creation_time'] > 0)\
+            & (data['all', 'particle_type'] == 5) \
+            & (data['all', 'particle_mass'].to('Msun') > 1)
 yt.add_particle_filter('p3_stars',function=_p3stars, 
-                        requires=['creation_time', 'particle_type', 'particle_mass'])
+                        requires=['creation_time', 'particle_type', 'particle_mass'],
+                        filtered_type='all')
 
 # p3 SN remnants
 def _p3remnant(pfilter, data):
-    return (data['creation_time'] > 0) \
-            & (data['particle_type'] == 5) \
-            & (data['particle_mass'].to('Msun') < 1e-5)
+    return (data['all', 'creation_time'] > 0) \
+            & (data['all', 'particle_type'] == 5) \
+            & (data['all', 'particle_mass'].to('Msun') < 1e-5)
 yt.add_particle_filter('sne_remnant',function=_p3remnant, 
                         requires=['creation_time', 'particle_type', 'particle_mass'])
 
 # p3 BH remnants
 def _p3bh(pfilter, data):
-    return (data['creation_time'] > 0) \
-                & (data['particle_type'] == 1) \
-                & (data['particle_mass'].to('Msun') > 1)
+    return (data['all', 'creation_time'] > 0) \
+                & (data['all', 'particle_type'] == 1) \
+                & (data['all', 'particle_mass'].to('Msun') > 1)
 yt.add_particle_filter('p3_bh',function=_p3bh, 
                         requires=['creation_time', 'particle_type', 'particle_mass'])
 
@@ -50,11 +51,11 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
-    datadest = '/mnt/c/Users/azton/Projects/phoenix_analysis'
+    datadest = 'C:/Users/azton/Projects/phoenix_analysis'
     sim = sys.argv[2]
     output = int(sys.argv[3])
     sim_root = sys.argv[1]
-    starfile = '%s/%s/RD%04d_p3-starfile.json'%(datadest, sim, d)
+    starfile = '%s/%s/RD%04d_p3_starfile.json'%(datadest, sim, output)
 
     ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
     ds = add_filters(ds)
@@ -89,6 +90,7 @@ def main():
         with open(starfile, 'w') as f:
             json.dump(stardict, f, indent=4)
     else:
+        print("loading existing starfile at %s"%starfile)
         with open(starfile, 'r') as f:
             stardict = json.load(f)    
     # M*(t)
