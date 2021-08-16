@@ -16,6 +16,8 @@ from argparse import ArgumentParser as ap
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
+plot_exemp = True # turn off to save on written files after debugging
+
 
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.01295
@@ -65,9 +67,7 @@ logged_pids = []
 n = 0
 # print('[%d] has:'%rank, localdspaths)
 for i, outpath in enumerate(localdspaths):
-    z_profiles = []
-    t_profiles = []
-    labels = []
+
 
     ds = yt.load(outpath)
     ds = add_particle_filters(ds)
@@ -75,10 +75,17 @@ for i, outpath in enumerate(localdspaths):
     ad0 = ds.all_data()
 
     if ad0['new_p3_stars','age'].size > 0:
+        
+
         dnum = int(os.path.split(outpath)[-1][2:])
 
         for j, c in enumerate(ad0['new_p3_stars','particle_position'].to('unitary')):
 
+            if plot_exemp:
+                z_profiles = []
+                t_profiles = []
+                z_labels = []
+                t_labels = []
             r = ds.quan(75, 'kpccm')
             sp = ds.sphere(c, r)
             if sp['p2_stars','age'].size > 0 \
@@ -118,19 +125,24 @@ for i, outpath in enumerate(localdspaths):
             #     continue # for now, just want to analyze pristine regions.
             print('iterating %d formed in RD%04d...'%(pidx, dnum))
             out_dumps = np.linspace(dnum, dfinal, int(args.model_time * 5.0 / args.output_skip), dtype=int)
-
-            print('%d outputs:'%rank, out_dumps)
+            for ddd, d in enumerate(out_dumps):
+                if d % args.output_skip != 0:
+                    out_dupms[ddd] -= d % args.output_skip
+            print('[%d] outputs:'%rank, out_dumps)
             for dd in out_dumps:
                 dsfile = dspath + "/RD%04d/RD%04d"%(dd,dd)
                 # print('Creating profiles for %s (%d/%d)'%(dsfile, dd, dfinal))
                 if os.path.exists(dsfile):
-                    dsn = yt.load(dsfile)
-                    dsn = add_particle_filters(dsn)
-                    if dd == dnum:
-                        time = dsn.current_time.to('Myr')
+                    try:
+                        dsn = yt.load(dsfile)
+                        dsn = add_particle_filters(dsn)
+                        if dd == dnum:
+                            time = dsn.current_time.to('Myr')
 
-                    ad = dsn.all_data()
-
+                        ad = dsn.all_data()
+                    except:
+                        print('Could not load %s'%dsfile)
+                        continue
                     # ind = np.where(output_list_srt == d)[0][0]
                     # pidx = pidx_srt[ind]
                     idx = np.where(ad['all','particle_index'] == pidx)[0][0]
@@ -155,7 +167,6 @@ for i, outpath in enumerate(localdspaths):
                     sp = dsn.sphere(c,r)
 
                     profile_stat[pidx]['time'].append(float(dsn.current_time.to('Myr')))
-                    labels.append('%0.2f Myr'%(dsn.current_time.to('Myr') - time))
                     profile_stat[pidx]['radius'].append(float(r.to('kpccm')))
                     profile_stat[pidx]['p3_all_ctime'].append(np.array(sp['all_p3','creation_time'].to('Myr')).tolist())
                     profile_stat[pidx]['p3_all_mass'].append(np.array(sp['all_p3','particle_mass'].to('Msun')).tolist())
@@ -196,19 +207,26 @@ for i, outpath in enumerate(localdspaths):
                                     break
                                 
                         profile_stat[pidx]['%s_radius'%field].append(float(rcut))
-                        if field == 'temperature':
-                            t_profiles.append(prof)
-                        else:
-                            z_profiles.append(prof)
+                        if plot_exemp:
+                            if field == 'temperature':
+                                t_profiles.append(prof)
+                                t_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time), rcut)
+                            else:
+                                z_profiles.append(prof)
+                                z_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time), rcut)
                     n += 1
-            p1 = yt.ProfilePlot.from_profiles(z_profiles, labels=labels)
-            p1.set_unit('radius','kpccm') 
-            os.makedirs('%s/%s/plots'%(args.output_dest, args.sim), exist_ok=True)
-            p1.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
+            # exemplary plots of the pid, for checking
+            if plot_exemp:
+                p1 = yt.ProfilePlot.from_profiles(z_profiles, labels=labels)
+                p1.set_unit('radius','kpccm') 
+                os.makedirs('%s/%s/plots'%(args.output_dest, args.sim), exist_ok=True)
+                p1.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
 
-            p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=labels)
-            p2.set_unit('radius','kpccm')
-            p2.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
+                p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=labels)
+                p2.set_unit('radius','kpccm')
+                p2.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
+        
+            # update logfile after each pid
             with open(logpath, 'w') as f:
                 json.dump(profile_stat, f, indent = 4)
         
