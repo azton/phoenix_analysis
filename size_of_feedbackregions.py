@@ -103,6 +103,7 @@ for i, outpath in enumerate(localdspaths):
             if os.path.exists(pid_path):
                 continue
             
+            print('Working PID %d in RD%04d'%(int(pidx), dnum))
             profile_stat[pidx] = {}
             profile_stat[pidx]['region_start_time'] = float(ds.current_time.to('Myr'))
             profile_stat[pidx]['time'] = [] # time of measurement
@@ -126,8 +127,10 @@ for i, outpath in enumerate(localdspaths):
             print('iterating %d formed in RD%04d...'%(pidx, dnum))
             out_dumps = np.linspace(dnum, dfinal, int(args.model_time * 5.0 / args.output_skip), dtype=int)
             for ddd, d in enumerate(out_dumps):
-                if d % args.output_skip != 0:
-                    out_dupms[ddd] -= d % args.output_skip
+                # only have every 10th dump at home ><
+
+                if d % 10 != 0 and '/mnt' in args.sim_root:
+                    out_dumps[ddd] -= d % 10
             print('[%d] outputs:'%rank, out_dumps)
             for dd in out_dumps:
                 dsfile = dspath + "/RD%04d/RD%04d"%(dd,dd)
@@ -145,8 +148,11 @@ for i, outpath in enumerate(localdspaths):
                         continue
                     # ind = np.where(output_list_srt == d)[0][0]
                     # pidx = pidx_srt[ind]
-                    idx = np.where(ad['all','particle_index'] == pidx)[0][0]
-
+                    try:
+                        idx = np.where(ad['all','particle_index'] == pidx)[0][0]
+                    except IndexError as ie:
+                        print("IndexError raised on rank %d for %s:\n"%(rank, dsfile), ie)
+                        continue
                     # find the radius where the metallicity falls off -- this may be smaller than the 
                     # temperature radius
                     zmean = 1e-5
@@ -210,19 +216,19 @@ for i, outpath in enumerate(localdspaths):
                         if plot_exemp:
                             if field == 'temperature':
                                 t_profiles.append(prof)
-                                t_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time), rcut)
+                                t_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time, rcut))
                             else:
                                 z_profiles.append(prof)
-                                z_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time), rcut)
+                                z_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time, rcut))
                     n += 1
             # exemplary plots of the pid, for checking
             if plot_exemp:
-                p1 = yt.ProfilePlot.from_profiles(z_profiles, labels=labels)
+                p1 = yt.ProfilePlot.from_profiles(z_profiles, labels=z_labels)
                 p1.set_unit('radius','kpccm') 
                 os.makedirs('%s/%s/plots'%(args.output_dest, args.sim), exist_ok=True)
                 p1.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
 
-                p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=labels)
+                p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=t_labels)
                 p2.set_unit('radius','kpccm')
                 p2.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
         
