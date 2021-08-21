@@ -1,3 +1,4 @@
+CosmologyOutputRedshift[0] = 30.000
 CosmologyOutputRedshift[1] = 29.958765
 CosmologyOutputRedshift[2] = 29.917668
 CosmologyOutputRedshift[3] = 29.876706
