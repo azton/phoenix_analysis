@@ -11,6 +11,7 @@ from yt.data_objects.particle_filters import add_particle_filter
 from analysis_helpers import *
 from mpi4py import MPI
 from argparse import ArgumentParser as ap
+yt.set_log_level(40)
 
 
 comm = MPI.COMM_WORLD
