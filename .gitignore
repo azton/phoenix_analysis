@@ -4,3 +4,7 @@
 *.sub
 *.png
 *.h5
+*.pdf
+*-checkpoint.ipynb
+*.log
+*.pyc
