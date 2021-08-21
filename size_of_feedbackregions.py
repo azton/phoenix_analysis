@@ -60,7 +60,7 @@ local_inds = np.arange(rank, len(alldspaths), size, dtype=int)
 localdspaths = [alldspaths[i] for i in local_inds]
 profile_fields = ['p3_metallicity','temperature']
 if os.path.exists(logpath):
-    with open(logfile, 'r') as f:
+    with open(logpath, 'r') as f:
         profile_stat = json.load(f)
 else:
     profile_stat = {}
@@ -84,7 +84,7 @@ for i, outpath in enumerate(localdspaths):
         dnum = int(os.path.split(outpath)[-1][2:])
 
         for j, c in enumerate(ad0['new_p3_stars','particle_position'].to('unitary')):
-
+            
             if plot_exemp:
                 z_profiles = []
                 t_profiles = []
@@ -109,7 +109,7 @@ for i, outpath in enumerate(localdspaths):
                 continue
 
             print('Working PID %d in RD%04d'%(int(pidx), dnum))
-            profile_stat[str(int(pidx))] = {}
+            profile_stat[pidx] = {}
             profile_stat[pidx]['region_start_time'] = float(ds.current_time.to('Myr'))
             profile_stat[pidx]['time'] = [] # time of measurement
             profile_stat[pidx]['p3_metallicity_radius'] = [] # calculated radius of enrichment zone
@@ -195,7 +195,7 @@ for i, outpath in enumerate(localdspaths):
                         prof = yt.create_profile(sp, 
                                                 'radius',
                                                 [('gas',field)],
-                                                weight_field='cell_volume')
+                                                weight_field=('gas','cell_volume'))
                         # prof.set_unit('radius','pc')
                         # take the min radius as where the profile drops to 1/100 of central value for z
                         
@@ -236,24 +236,29 @@ for i, outpath in enumerate(localdspaths):
                 p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=t_labels)
                 p2.set_unit('radius','kpccm')
                 p2.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
-            with h5py.File('%s/%s/%d_profiles.h5'%args.output_dest, args.sim, pidx, 'w') as f:
-                times = []
-                for i, profile in enumerate(z_profiles):
-                    r = profile.x.to('kpccm')
-                    z = profile.field_data[('gas','p3_metallicity')]
-                    time = float(z_labels[i].split(':')[-1])
-                    times.append(time)
-                    f.create_dataset('radius_%0.2f'%time, data = r)
-                    f.create_dataset('p3_metallicity_%0.2f'%time, data = z)
-                f.attrs['times'] = times
-                for i, profile in enumerate(t_profiles):
-                    r = profile.x.to('kpccm')
-                    z = profile.field_data[('gas','p3_metallicity')]
-                    time = float(z_labels[i].split(':')[-1])
-                    times.append(time)
-                    f.create_dataset('radius_%0.2f'%time, data = r)
-                    f.create_dataset('temperature_%0.2f'%time, data = z)
+            
+            profile_rec = {}
+            profile_rec['pid'] = pidx
+            profile_rec['times'] = []
+            profile_rec['z_radii'] = []
+            profile_rec['t_radii'] = []
+            profile_rec['p3_metallicity'] = []
+            profile_rec['temperature'] = []
+            for kk, profile in enumerate(t_profiles):
+                profile_rec['times'].append(float(t_labels[kk].split(':')[-1]))
+                profile_rec['temperature'].append(np.array(profile.field_data[('gas','temperature')]).tolist())
+                profile_rec['t_radii'].append(np.array(profile.x.to('kpccm')).tolist())
+            for profile in z_profiles:
+                profile_rec['p3_metallicity'].append(np.array(profile.field_data[('gas','p3_metallicity')]).tolist())
+                profile_rec['z_radii'].append(np.array(profile.x.to('kpccm')).tolist())
+
+            if not os.path.exists('%s/%s/profiles'%(args.output_dest, args.sim)):
+                os.makedirs('%s/%s/profiles'%(args.output_dest, args.sim), exist_ok=True)
+            with open('%s/%s/profiles/%d_profiles.json'%(args.output_dest, args.sim, pidx), 'w') as f:
+                json.dump(profile_rec, f, indent=4)
+            
             # update logfile after each pid
+            print("FINISHED %d"%pidx)
             with open(logpath, 'w') as f:
                 json.dump(profile_stat, f, indent = 4)
         
