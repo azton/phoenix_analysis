@@ -105,8 +105,9 @@ for i, outpath in enumerate(localdspaths):
             pidx = int(ad0['new_p3_stars','particle_index'][j])
         
             # if weve logged the profile before
-            pid_path = '%s/%s/plots/%d_1d-Profile_radius_temperature.png'%(args.output_dest, args.sim, pidx)
+            pid_path = '%s/%s/profiles/%d_profiles.png'%(args.output_dest, args.sim, pidx)
             if os.path.exists(pid_path):
+                print("SKIPPING %d (ALREADY ACCOMPLISHED)"%pidx)
                 continue
 
             print('Working PID %d in RD%04d'%(int(pidx), dnum))
