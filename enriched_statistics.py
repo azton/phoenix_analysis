@@ -15,9 +15,9 @@ from mpi4py import MPI
 
 from analysis_helpers import *
 
-def _ion_frac(pfilter, data):
-    return data['gas','H_p1_number_density'] / (data['gas','H_p0_number_density'] + data['gas','H_p1_number_density'])
-yt.add_field(('gas','ionized_fraction'), function=_ion_frac, units = None, sampling_type='cell')
+# def _ion_frac(pfilter, data):
+#     return data['gas','H_p1_number_density'] / (data['gas','H_p0_number_density'] + data['gas','H_p1_number_density'])
+# yt.add_field(('gas','ionized_fraction'), function=_ion_frac, units = None, sampling_type='cell')
 
 argparser = ap()
 
@@ -93,7 +93,7 @@ for d in outputs:
             volstat['f_enr_high'][k].append(float(fenrhigh))
         for k in volstat['ion_frac']:
             # ion_frac = ad['H_p1_density'] / (ad['H_p0_density'] + ad['H_p1_density'])
-            ionvol = ad['gas','cell_volume'][ad['gas','ionized_fraction'] > k].sum().to('pc**3') / vtot
+            ionvol = ad['gas','cell_volume'][ad['gas','H_p1_fraction'] > k].sum().to('pc**3') / vtot
             volstat['ion_frac'][k].append(float(ionvol))
         # log
         volstat['p3_f_enr'].append(float(p3_fenr))
