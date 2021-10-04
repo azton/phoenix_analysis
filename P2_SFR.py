@@ -34,10 +34,10 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
-    datadest = 'C:/Users/azton/Projects/phoenix_analysis'
+    datadest = '/home/darksky/azton/Projects/phoenix_analysis'
+    sim_root = sys.argv[1]
     sim = sys.argv[2]
     output = int(sys.argv[3])
-    sim_root = sys.argv[1]
     starfile = '%s/%s/RD%04d_p2_starfile.json'%(datadest, sim, output)
 
     ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
@@ -86,7 +86,7 @@ def main():
     mbins = np.zeros(101)
     nbins = np.zeros(101)
     for i, t in enumerate(stardict['birth']):
-        if stardict['mass'][i] <= 300:
+        # if stardict['mass'][i] <= 300: #le sigh, p2 isnt mass limited, you dope
             tbin = np.digitize(t, tbins)
             mbins[tbin] += stardict['mass'][i]
             nbins[tbin] += 1
