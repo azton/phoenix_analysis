@@ -34,7 +34,7 @@ def get_redshift(ds, t):
 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 '''
 def main():
-    datadest = '/home/darksky/azton/Projects/phoenix_analysis'
+    datadest = '/home/darksky/Projects/phoenix_analysis'
     sim_root = sys.argv[1]
     sim = sys.argv[2]
     output = int(sys.argv[3])
