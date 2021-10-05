@@ -7,7 +7,8 @@
         <z> for rho > 100 rho/<rho>
             same as function of N-remnants within volume
 '''
-
+import matplotlib
+matplotlib.use("Agg")
 import yt, os, json
 import numpy as np
 from argparse import ArgumentParser as ap
@@ -18,6 +19,14 @@ from analysis_helpers import *
 def _ion_frac(pfilter, data):
     return data['gas','H_p1_number_density'] / (data['gas','H_p0_number_density'] + data['gas','H_p1_number_density'])
 yt.add_field(('gas','ionized_fraction'), function=_ion_frac, units = None, sampling_type='cell')
+def _sum_metallicity(field, data):
+    return ((data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3')).to("Zsun")
+yt.add_field(('gas','sum_metallicity'), function=_sum_metallicity, units = 'Zsun', sampling_type='cell')
+
+def _p3_metallicity(field, data):
+    return (data['SN_Colour'] / data['Density']).to("Zsun")
+yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun', sampling_type='cell')
+
 
 argparser = ap()
 
@@ -75,25 +84,25 @@ for d in outputs:
         ad = ds.all_data()
         
         # tracking qtys
-        fenr = ad['gas','cell_volume'][ad['sum_metallicity'] > z_crit].sum().to('pc**3') / vtot
-        p3_fenr = ad['gas','cell_volume'][ad['p3_metallicity'] > z_crit].sum().to('pc**3') / vtot
+        fenr = ad['gas','cell_volume'][ad['gas','sum_metallicity'] > z_crit].sum().to('pc**3') / vtot
+        p3_fenr = ad['gas','cell_volume'][ad['gas','p3_metallicity'] > z_crit].sum().to('pc**3') / vtot
         for k in volstat['f_enr_od']:
             if type(k) != str:
                 vhigh = ad['gas','cell_volume'][ad['gas','overdensity'] > k].sum().to('pc**3')
-                fenrod = ad['gas','cell_volume'][(ad['sum_metallicity'] > z_crit) & (ad['overdensity'] > k)].sum().to('pc**3') / vhigh
+                fenrod = ad['gas','cell_volume'][(ad['gas','sum_metallicity'] > z_crit) & (ad['overdensity'] > k)].sum().to('pc**3') / vhigh
                 volstat['f_enr_od'][k].append(float(fenrod))
             else:
                 vhigh = ad['gas','cell_volume'][ad['gas','overdensity'] < 1].sum().to('pc**3')
-                fenrod = ad['gas','cell_volume'][(ad['sum_metallicity'] > z_crit) & (ad['overdensity'] < 1)].sum().to('pc**3') / vhigh
+                fenrod = ad['gas','cell_volume'][(ad['gas','sum_metallicity'] > z_crit) & (ad['overdensity'] < 1)].sum().to('pc**3') / vhigh
                 volstat['f_enr_od']['<1'].append(float(fenrod))
 
 
         for k in volstat['f_enr_high']:
-            fenrhigh = ad['gas','cell_volume'][ad['sum_metallicity'] > k].sum().to('pc**3') / vtot
+            fenrhigh = ad['gas','cell_volume'][ad['gas','sum_metallicity'] > k].sum().to('pc**3') / vtot
             volstat['f_enr_high'][k].append(float(fenrhigh))
         for k in volstat['ion_frac']:
             # ion_frac = ad['H_p1_density'] / (ad['H_p0_density'] + ad['H_p1_density'])
-            ionvol = ad['gas','cell_volume'][ad['gas','ionized_fraction'] > k].sum().to('pc**3') / vtot
+            ionvol = ad['gas','cell_volume'][ad['gas','H_p1_fraction'] > k].sum().to('pc**3') / vtot
             volstat['ion_frac'][k].append(float(ionvol))
         # log
         volstat['p3_f_enr'].append(float(p3_fenr))
