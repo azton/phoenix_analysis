@@ -69,9 +69,20 @@ def get_labels(data, idx, fields):
 
 def split_dataset(X, Y):
     xtr, xval, ytr, yval = train_test_split(X, Y, test_size=0.2, random_state=8675309)
-    # xtr, xtest, ytr, ytest = train_test_split(xtr, ytr, test_size=0.125, random_state=2339479)
+    xtr, xtest, ytr, ytest = train_test_split(xtr, ytr, test_size=0.125, random_state=2339479)
     
-    return xtr, ytr, xval, yval
+    return xtr, ytr, xval, yval, xtest, ytest
+    
+def save_best_model(model, name):
+    print("SAVING record for %s"%name)
+    params = model.get_params(deep=True)
+    for k in params.keys():
+        print(k)
+    if not os.path.exists('./record_models'):
+        os.makedirs('./record_models', exist_ok=True)
+    with open('./record_models/%s.json'%name, 'w') as f:
+        json.dump(params, f)
+
 
 def get_data_dict(path, sim = None):
     # provide overarching path to data files
@@ -106,7 +117,7 @@ def get_data_dict(path, sim = None):
 def main():
 
     argparser = ap()
-    argparser.add_argument('--logpath', type=str, default='./size_of')
+    argparser.add_argument('--logpath', type=str, default='./size_of-bak')
     argparser.add_argument('--model_time', type=float, default=30.0)
     argparser.add_argument('--output_dir', type=str, default = './modelling_feedback')
     argparser.add_argument('--fields', type=str, nargs='+', default=None)
@@ -140,14 +151,14 @@ def main():
     print("Found %d Training inputs, %d validation"\
                 %(len(Xtr), len(Xv)))
     models = [
-                AdaBoostRegressor,
+                # AdaBoostRegressor,
                 DecisionTreeRegressor, 
                 ExtraTreesRegressor, 
                 GradientBoostingRegressor,
                 # RandomForestRegressor
                 ]
     model_labels = [
-                    'AdaBoost',
+                    # 'AdaBoost',
                     'DecisionTree',
                     'RandomForest+',
                     'GradBoost',
@@ -157,9 +168,13 @@ def main():
     fig, ax = plt.subplots(2,2, sharex=True, figsize=(10,10))
     ax=ax.flatten()
     # if type(ax) != np.array: ax = [ax]
-    for k in range(2): # 10 runs, to start averaging out noise
-        print("<<< ITERATION %d IN PROGRESS >>>"%k)
-        for i, model in enumerate(models):
+    for i, model in enumerate(models):
+        print("%s:"%(model_labels[i].upper()))
+        max_exvar = -100
+        min_mape = 10
+        for k in range(2): # 10 runs, to start averaging out noise
+            print("\t\t<<< ITERATION %d IN PROGRESS >>>"%k)
+    
             boost_dep = 3
             min_leaf = 1
             name = model_labels[i]
@@ -217,10 +232,18 @@ def main():
                     
                         print("\t%0.2f: %0.2f"%(phat[ii], Yv[ii]))
                     print('\n\n')
+                ev = explained_variance_score(phat, Yv)
+                pe = mean_absolute_percentage_error(phat, Yv)
                 mse.append(mean_squared_error(phat, Yv))
                 mae.append(mean_absolute_percentage_error(Yv, phat))
-                exv.append(explained_variance_score(phat, Yv))
-                mape.append(mean_absolute_percentage_error(phat, Yv))
+                exv.append(ev)
+                mape.append(pe)
+                
+                if max_exvar < ev and min_mape > pe:
+                    max_exvar = ev
+                    min_mape = pe
+                    save_best_model(predictor, model_labels[i]) 
+
 
             ax[0].plot(est_cnt, mse, color=colors[i], label=model_labels[i] if k == 0 else None, alpha=0.5)
             ax[1].plot(est_cnt, mae, color=colors[i], label=model_labels[i] if k == 0 else None, alpha=0.5)

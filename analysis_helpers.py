@@ -3,8 +3,8 @@
 """
 
 import yt
-import mysql.connector
-from mysql.connector import Error
+# import mysql.connector
+# from mysql.connector import Error
 
 
 def _sum_metallicity(field, data):
@@ -100,30 +100,3 @@ def add_particle_filters(ds):
         ds.add_particle_filter(filter)
     return ds
 
-def db_connect(db_name = None):
-    mydb = mysql.connector.connect(
-        host="localhost",
-        user="Azton",
-        password="DDF0rmfr33d0m",
-        database=db_name
-        )
-    return mydb
-
-def execute_query(connection, query):
-    cursor = connection.cursor()
-    try:
-        cursor.execute(query)
-        connection.commit()
-        print("Query successful")
-    except Error as err:
-        print(f"Error: '{err}'")
-
-def read_query(connection, query):
-    cursor = connection.cursor()
-    result = None
-    try:
-        cursor.execute(query)
-        result = cursor.fetchall()
-        return result
-    except Error as err:
-        print(f"Error: '{err}'")

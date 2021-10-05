@@ -1,3 +1,5 @@
+
+=======
 '''
     Through time, plot the enriched volume where enriched is
     z >= z_critical (for p2 formation)
@@ -111,4 +113,4 @@ for d in outputs:
         volstat['z'].append(float(z))
 
     with open('%s/%d_%s.json'%(args.output_dest, rank, args.sim), 'w') as f:
-        json.dump(volstat, f, indent=4)
+      json.dump(volstat, f, indent=4)
