@@ -17,8 +17,8 @@ yt.set_log_level(40)
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-plot_exemp = True # turn off to save on written files after debugging
-plot_proj = True
+plot_exemp = False # turn off to save on written files after debugging
+plot_proj = False
 
 def _sum_metallicity(field, data):
     return ((data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3')).to('Zsun')
@@ -47,7 +47,7 @@ def main():
 
     if not os.path.exists(args.output_dest):
         os.makedirs(args.output_dest, exist_ok = True)
-    logpath = '%s/%s/%02d_size-regionlog.json'%(args.output_dest, args.sim, rank)
+    logpath = '%s/%s/%03d_size-regionlog.json'%(args.output_dest, args.sim, rank)
     if not os.path.exists(os.path.split(logpath)[0]):
         os.makedirs(os.path.split(logpath)[0], exist_ok=True)
     dspath = '%s/%s'%(args.sim_root, args.sim)
@@ -56,7 +56,9 @@ def main():
     alldspaths = glob.glob('%s/RD*/RD[01][0123456789][0123456789][0123456789]'%(dspath))
     local_inds = np.arange(rank, len(alldspaths), size, dtype=int)
     localdspaths = [alldspaths[i] for i in local_inds]
-    profile_fields = ['p3_metallicity','temperature']
+    profile_fields = ['p3_metallicity','H_p1_fraction', 'sum_metallicity']
+    fsmall = [1e-5, 0.05, 1e-5]
+
     if os.path.exists(logpath):
         with open(logpath, 'r') as f:
             profile_stat = json.load(f)
@@ -64,15 +66,14 @@ def main():
         profile_stat = {}
 
 
-    logged_pids = []
 
     n = 0
     # print('[%d] has:'%rank, localdspaths)
 
     # radii to use later, in kpc
-    r_plot = 5
+    r_step = 0.25 # step to find metal radius
     r_big = 12
-    r_small = 1
+    r_small = 0.25
     for i, outpath in enumerate(localdspaths):
 
         print('[%d] working %s'%(rank, outpath))
@@ -84,9 +85,10 @@ def main():
         rsad = rsds.all_data()
         print('[%d] checking %d halos...'%(rank, len(rsad['halos','particle_identifier'])))
         for ii, r in enumerate(rsad['halos','virial_radius'].to('unitary')):
+            halo_written = False # have we logged stars in this halo?
             hcenter = [rsad['halos','particle_position_%s'%a][ii].to('unitary') for a in 'xyz']
             # r = ds.quan(5*r, 'kpc')
-            hsp = ds.sphere(hcenter, 5*r)
+            hsp = ds.sphere(hcenter, r)
 
 
             if hsp['p2_stars','age'].size > 0 \
@@ -94,10 +96,10 @@ def main():
                 or hsp['p3_bh', 'age'].size > 0 \
                 or np.any(hsp['p3_stars','age'].to('Myr') > 0.2):
                 # theres prior star formation; skip this one
-                print("[%d] Theres prior stars in halo %d!"%(rank, ii))
+                # print("[%d] Theres prior stars in halo %d!"%(rank, ii))
                 continue
             try:
-                if hsp['new_p3_stars','age'].size > 0:
+                if hsp['new_p3_stars','age'].size > 0 and not halo_written:
                     
 
                     print('[%d] Found stars! iterating %d new p3 stars...'%(rank,  hsp['new_p3_stars','age'].size))
@@ -108,26 +110,30 @@ def main():
                             t_profiles = []
                             z_labels = []
                             t_labels = []
-                        r = ds.quan(r_plot, 'kpc')
-                        sp = ds.sphere(c, r)
+                        # r = ds.quan(r_plot, 'kpc')
+                        # sp = ds.sphere(c, r)
 
 
 
                         dfinal = dnum + args.model_time * 5
-                        pidx = int(sp['new_p3_stars','particle_index'][j])
-                        print('[%d] working on %d'%(rank,pidx))
+                        pidx = int(hsp['new_p3_stars','particle_index'][j])
+                        # print('[%d] working on %d'%(rank,pidx))
                         # if weve logged the profile before
                         pid_path = '%s/%s/profiles/%d_profiles.png'%(args.output_dest, args.sim, pidx)
                         if os.path.exists(pid_path):
                             print("SKIPPING %d (ALREADY ACCOMPLISHED)"%pidx)
                             continue
 
-                        print('Working PID %d in RD%04d'%(int(pidx), dnum))
+                        # print('Working PID %d in RD%04d'%(int(pidx), dnum))
                         profile_stat[pidx] = {}
                         profile_stat[pidx]['region_start_time'] = float(ds.current_time.to('Myr'))
+                        profile_stat[pidx]['box_size'] = float(ds.parameters['CosmologyComovingBoxSize'])
+                        profile_stat[pidx]['region_center'] = []
+                        profile_stat[pidx]['region_unitary'] = []
                         profile_stat[pidx]['time'] = [] # time of measurement
-                        profile_stat[pidx]['p3_metallicity_radius'] = [] # calculated radius of enrichment zone
-                        profile_stat[pidx]['temperature_radius'] = [] # radius of hot zone
+                        profile_stat[pidx]['redshift'] = [] # time of measurement
+                        for field in profile_fields:
+                            profile_stat[pidx]['%s_radius'%field] = [] # calculated radius of enrichment zone
                         profile_stat[pidx]['p3_all_ctime'] = []
                         profile_stat[pidx]['p3_all_position'] = []
                         profile_stat[pidx]['p3_star_position'] = []
@@ -142,7 +148,11 @@ def main():
                         profile_stat[pidx]['p2_star_position'] = []
                         profile_stat[pidx]['p3_bh_mass'] = []
                         profile_stat[pidx]['snr_mass'] = []
-                        profile_stat[pidx]['radius'] = []
+
+                        profile_stat[pidx]['enriched_stat'] = {}
+                        profile_stat[pidx]['enriched_stat']['std'] = []
+                        profile_stat[pidx]['enriched_stat']['mu'] = [] 
+
                         # if b['gas','p3_metallicity'].max() > 1e-5:
                         #     continue # for now, just want to analyze pristine regions.
                         print('iterating %d formed in RD%04d...'%(pidx, dnum))
@@ -153,45 +163,46 @@ def main():
                             if d % 10 != 0 and '/mnt' in args.sim_root:
                                 out_dumps[ddd] -= d % 10
                         print('[%d] outputs:'%rank, out_dumps)
-                        for dd in out_dumps:
+                        for dcnt, dd in enumerate(out_dumps):
                             dsfile = dspath + "/RD%04d/RD%04d"%(dd,dd)
                             # print('Creating profiles for %s (%d/%d)'%(dsfile, dd, dfinal))
                             if os.path.exists(dsfile):
                                 try:
                                     dsn = yt.load(dsfile)
                                     dsn = add_particle_filters(dsn)
-                                    dsn.add_fields(dsn)
+                                    dsn = add_fields(dsn)
 
-                                    if dd == dnum:
-                                        time = dsn.current_time.to('Myr')
                                 except:
                                     print('Could not load %s'%dsfile)
                                     continue
+                                
                                 # use big sphere to find particle in this output
                                 # all_data() takes way too long on, i.e., phx512
                                 r = dsn.quan(r_big, 'kpc')
                                 sp = dsn.sphere(c, r)
-                                # ind = np.where(output_list_srt == d)[0][0]
-                                # pidx = pidx_srt[ind]
+
                                 try:
                                     idx = np.where(sp['all','particle_index'] == pidx)[0][0]
                                 except IndexError as ie:
                                     print("IndexError raised on rank %d for %s:\n"%(rank, dsfile), ie)
                                     continue
-                                    
+
+                                # use small sphere centered on the particle we found
+                                # to ID the radius of metal system by falloff where
+                                # mean of metal within falls to 1e-5   
                                 r = dsn.quan(r_small, 'kpc')
                                 c = sp['all','particle_position'][idx]
                                 sp = dsn.sphere(c, r)                    
-                                zmean =  sp['gas','sum_metallicity'].mean()# critical metallicity, once mean is below this, the edge is found
+                                zmean =  sp['gas','p3_metallicity'].mean()# critical metallicity, once mean is below this, the edge is found
                                 # print(zmean, len(zmean))
                                 zmax = 0
                                 z = zmean
                                 # if zmean < 1e-7:
                                 #     continue
-                                while z >= 1e-5 and zmean > 1e-8:
-                                    r *= 1.25
+                                while z >= 1e-5 and zmean > 1e-9:
+                                    r += ds.quan(r_step, 'kpc')
                                     sp = dsn.sphere(c, r)
-                                    z = sp.quantities.weighted_average_quantity(('gas','sum_metallicity'), 
+                                    z = sp.quantities.weighted_average_quantity(('gas','p3_metallicity'), 
                                                                                 ('gas','cell_volume'))
                                     # if z < zmean:
                                     #     zmean = float(z)
@@ -201,12 +212,14 @@ def main():
                                         break
                                     if r.to('kpc') > r_big:
                                         break
-                                print('[%d] PID %d (formed RD%04d) found edge at %0.2f kpc with value %e Zsun in RD%04d'%\
-                                            (rank, pidx, dnum, r.to('kpc'), z, dd))
-                                sp = dsn.sphere(c,r)
+                                # print('[%d] PID %d (formed RD%04d) found edge at %0.2f kpc with value %e Zsun in RD%04d'%\
+                                            # (rank, pidx, dnum, r.to('kpc'), z, dd))
+                                sp = dsn.sphere(c, r)
 
                                 profile_stat[pidx]['time'].append(float(dsn.current_time.to('Myr')))
-                                profile_stat[pidx]['radius'].append(float(r.to('kpccm')))
+                                profile_stat[pidx]['redshift'].append(float(dsn.current_redshift))
+                                profile_stat[pidx]['region_center'].append(np.array(c.to('pc')).tolist())
+                                profile_stat[pidx]['region_unitary'].append(np.array(c.to('unitary')).tolist())
                                 profile_stat[pidx]['p3_all_ctime'].append(np.array(sp['all_p3','creation_time'].to('Myr')).tolist())
                                 profile_stat[pidx]['p3_all_mass'].append(np.array(sp['all_p3','particle_mass'].to('Msun')).tolist())
                                 profile_stat[pidx]['p3_all_position'].append(np.array(sp['all_p3','particle_position'].to('pc')).tolist())
@@ -218,41 +231,38 @@ def main():
                                 profile_stat[pidx]['p3_live_masses'].append(np.array(sp['p3_stars','particle_mass'].to('Msun')).tolist())
                                 profile_stat[pidx]['p3_live_ctime'].append(np.array(sp['p3_stars','creation_time'].to('Myr')).tolist())
 
+                                #stats of enriched gas within volume; std and mu of (log(z) | z > z_crit)
+                                enriched = True
+                                profile_stat[pidx]['enriched_stat']['std'].append(np.std(np.log10(sp['gas','p3_metallicity'])))
+                                profile_stat[pidx]['enriched_stat']['mu'].append(float(np.log10(sp['gas','p3_metallicity']).mean() ))
+
+
                                 for k in ['snr','p3_bh']:
                                     profile_stat[pidx]['%s_mass'%k].append(np.array(sp[k, 'particle_mass'].to('Msun')).tolist())
                                     profile_stat[pidx]['%s_ctime'%k].append(np.array(sp[k, 'creation_time'].to('Myr')).tolist())
-                                for field in profile_fields:
-                                    prof = yt.create_profile(sp, 
-                                                            'radius',
-                                                            [('gas',field)],
-                                                            weight_field=('gas','cell_volume'))
-                                    # prof.set_unit('radius','pc')
-                                    # take the min radius as where the profile drops to 1/100 of central value for z
-                                    
-                                    z_prof = prof.field_data[('gas',field)]
-                                    radius = prof.x
-                                    radius = radius[z_prof != 0]
-                                    z_prof = z_prof[z_prof != 0]
-                                    z_max = z_prof[radius.to('kpccm') < 0.5].mean()
-                                    zcut = -1
-                                    rcut = -1
-                                    rfactor = 1000. #if field=='sum_metallicity' else 10.
-                                    if field == 'temperature' and z_max <= 1e4:
-                                        rfactor = float(z_max/500)
-                                    for ii, z in enumerate(z_prof):
-                                            if z < z_max / rfactor:
-                                                zcut = z
-                                                rcut = radius[ii].to('kpc')
-                                                break
-                                            
-                                    profile_stat[pidx]['%s_radius'%field].append(float(rcut))
-                                    if plot_exemp:
-                                        if field == 'temperature':
-                                            t_profiles.append(prof)
-                                            t_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time, rcut))
-                                        else:
-                                            z_profiles.append(prof)
-                                            z_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time, rcut))
+                                
+                                for field, minval in zip(profile_fields, fsmall):
+                                
+                                    r = ds.quan(r_small, 'kpc')
+                                    sp = dsn.sphere(c, r)
+                                    fval = sp.quantities.weighted_average_quantity(('gas',field), ('gas','cell_volume'))
+                                    fcenter = fval
+                                    fmax = 0
+                                    while fval >= fcenter / 100.0:
+                                        sp = dsn.sphere(c, r)
+                                        fldmean = sp.quantities.weighted_average_quantity(('gas', field), 
+                                                                                    ('gas','cell_volume'))
+                                        # if z < zmean:
+                                        #     zmean = float(z)
+                                        if fldmean > fmax: 
+                                            fmax = float(fldmean)
+                                        if fldmean < minval:
+                                            break
+                                        if r.to('kpc') > r_big:
+                                            break
+                                        r *= 1.2
+                                    print('[%d] at %d step, found r=%0.2f kpc for %s with value %e'%(rank, dcnt, r, field, fldmean))
+                                    profile_stat[pidx]['%s_radius'%field].append(float(r.to('kpc')))
                                 if plot_proj:
                                     prjpath = '%s/%s/projections/%d/'%(args.output_dest, args.sim, pidx)
                                     if not os.path.exists(prjpath):
@@ -266,39 +276,11 @@ def main():
                                     prj.save(prjpath+'%02d'%n)
                                     del(prj)
                                 n += 1
-                        # exemplary plots of the pid, for checking
-                        if plot_exemp and len(z_profiles) > 0:
-                            p1 = yt.ProfilePlot.from_profiles(z_profiles, labels=z_labels)
-                            p1.set_unit('radius','kpc') 
-                            os.makedirs('%s/%s/plots'%(args.output_dest, args.sim), exist_ok=True)
-                            p1.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
 
-                            p2 = yt.ProfilePlot.from_profiles(t_profiles, labels=t_labels)
-                            p2.set_unit('radius','kpc')
-                            p2.save('%s/%s/plots/%d'%(args.output_dest, args.sim, pidx))
-                        
-                        profile_rec = {}
-                        profile_rec['pid'] = pidx
-                        profile_rec['times'] = []
-                        profile_rec['z_radii'] = []
-                        profile_rec['t_radii'] = []
-                        profile_rec['p3_metallicity'] = []
-                        profile_rec['temperature'] = []
-                        for kk, profile in enumerate(t_profiles):
-                            profile_rec['times'].append(float(t_labels[kk].split(':')[-1]))
-                            profile_rec['temperature'].append(np.array(profile.field_data[('gas','temperature')]).tolist())
-                            profile_rec['t_radii'].append(np.array(profile.x.to('kpccm')).tolist())
-                        for profile in z_profiles:
-                            profile_rec['p3_metallicity'].append(np.array(profile.field_data[('gas','p3_metallicity')]).tolist())
-                            profile_rec['z_radii'].append(np.array(profile.x.to('kpccm')).tolist())
-
-                        if not os.path.exists('%s/%s/profiles'%(args.output_dest, args.sim)):
-                            os.makedirs('%s/%s/profiles'%(args.output_dest, args.sim), exist_ok=True)
-                        with open('%s/%s/profiles/%d_profiles.json'%(args.output_dest, args.sim, pidx), 'w') as f:
-                            json.dump(profile_rec, f, indent=4)
-                        
-                        # update logfile after each pid
-                        print("FINISHED %d"%pidx)
+                                halo_written = True # we only want to log the first star from the halo, as
+                                                    # further stars are likely near duplicate regions as the first
+                    # # update logfile after each pid
+                    # print("FINISHED %d"%pidx)
 
                     with open(logpath, 'w') as f:
                         json.dump(profile_stat, f, indent = 4)

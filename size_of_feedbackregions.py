@@ -18,7 +18,7 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 plot_exemp = True # turn off to save on written files after debugging
-plot_prj = True
+plot_proj = True
 
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.01295
@@ -214,12 +214,12 @@ for i, outpath in enumerate(localdspaths):
                                     z_profiles.append(prof)
                                     z_labels.append('%0.2f Myr: %0.2f'%(dsn.current_time.to('Myr') - time, rcut))
                         n += 1
-                        if plot_proj:
+                        if plot_proj and n <= 10:
                             prjpath = '%s/%s/projections/%d'%(args.output_dest, args.sim, pidx)
                             if not os.path.exists(prjpath):
                                 os.makedirs(prjpath, exist_ok=True)
-                            b = ds.box(c-r, c+r)
-                            prj = yt.ProjectionPlot(ds, 'z', [('gas','density'),('gas','metallicity'), ('gas','sum_metallicity')], weight_field=('gas','density'), data_source=b, center=c, width=2*r)
+                            b = dsn.box(c-1.1*r, c+1.1*r)
+                            prj = yt.ProjectionPlot(ds, 'z', [('gas','density'),('gas','p3_metallicity'), ('gas','sum_metallicity')], weight_field=('gas','density'), data_source=b, center=c, width=2*r)
                             for sc in b['p3_stars','particle_position']:
                                 prj.annotate_marker(sc, marker='*', plot_args={'color':'lime', 'alpha':0.5})
                             for sc in b['p2_stars', 'particle_position']:
