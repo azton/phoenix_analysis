@@ -25,13 +25,14 @@ import numpy as np
 from mpi4py import MPI
 from argparse import ArgumentParser as ap
 
+yt.set_log_level(40)
 def _sum_metallicity(field, data):
     return (data['Metal_Density'] + data['SN_Colour']).to('g/cm**3')/data['Density'].to('g/cm**3') / 0.012950
-yt.add_field(('gas','sum_metallicity'), function=_sum_metallicity, units = 'Zsun', sampling_type='cell')
+# yt.add_field(('gas','sum_metallicity'), function=_sum_metallicity, units = 'Zsun', sampling_type='cell')
 
 def _p3_metallicity(field, data):
     return (data['SN_Colour'] / data['Density']) / 0.012950
-yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun', sampling_type='cell')
+# yt.add_field(('gas','p3_metallicity'), function=_p3_metallicity, units='Zsun', sampling_type='cell')
 
 
 def find_correct_output(ds, t):
@@ -109,9 +110,7 @@ def main():
 
     form_outs = np.arange(init_out, final_out) # actually returns dump before formation
     nouts = len(form_outs)/float(size)
-    localouts = np.arange(int(rank*nouts), int(rank*nouts)+int(nouts))
-    print("HELLO! Today rank %d/%d will be iterating through RD%04d to RD%04d, %d outputs in search of the origin of P2 stars!"\
-            %(rank, size, len(form_outs)/size, localouts[0], localouts[-1]-1))
+    localouts = np.arange(rank, len(form_outs), size)
     
     # logged_p2 = []
     comp_output_log = '%s_p2origin_completed_outputs.log'%sim
@@ -155,86 +154,93 @@ def main():
             continue
 
         dspath = '%s/%s/RD%04d/RD%04d'%(simpath, sim, d, d)
+        rspath = '%s/%s/rockstar_halos/halos_RD%04d.0.bin'%(simpath, sim, d)
         print("Checking %s"%dspath)
-        if os.path.exists(dspath): # local ds's are multiples of 5
+        if os.path.exists(dspath) and os.path.exists(rspath): # local ds's are multiples of 5
             ds = yt.load(dspath)
+            rsds = yt.load(rspath)
+            rsad = rsds.all_data()
             ds.add_particle_filter('p2_stars')
             ds.add_particle_filter('new_p2_stars')
             ds.add_particle_filter('stars')
-            ad = ds.all_data()
-            try:
-                for idx, p2c in enumerate(ad['new_p2_stars','particle_position'].to('unitary')):
-                    pid = int(ad['new_p2_stars','particle_index'][idx])
-                    ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
-                    p2r = ds.quan(500, 'pc').to('unitary')
-                    sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
-                    if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum())).to('Zsun') <= 5e-5: # only analyze if region seems to not have ongoing prior p2 star formation
-                        print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
-                        r = ds.quan(200, 'kpccm').to('unitary')
-                        sp = ds.sphere(p2c, r)
-                        p3 = np.array(sp['stars','particle_index'])
-                        enr_relations['enricher_mass'][int(pid)] = []
-                        enr_relations['distance'][int(pid)] = []
-                        enr_relations['formation_dt'][int(pid)]        = []
-                        enr_relations['sne_dt'][int(pid)]              = []
-                        enr_relations['enricher_mean_z'][int(pid)]     = []
-                        enr_relations['enricher_min_z'][int(pid)]      = []
-                        enr_relations['enricher_max_z'][int(pid)]      = []
+            for i in range(rsad['halos','virial_radius'].to('unitary').size):
+                r = rsad['halos','virial_radius'][i].to('unitary')
+                c = rsad['halos','particle_position'][i].to('unitary')
+                ad = ds.sphere(c,2*r)
+                try:
+                    for idx, p2c in enumerate(ad['new_p2_stars','particle_position'].to('unitary')):
+                        pid = int(ad['new_p2_stars','particle_index'][idx])
+                        ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
+                        p2r = r
+                        sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
+                        if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum())).to('Zsun') <= 3.1e-6: # only analyze if region seems to not have ongoing prior p2 star formation
+                            print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
+                            r = ds.quan(200, 'kpccm').to('unitary')
+                            sp = ds.sphere(p2c, r)
+                            p3 = np.array(sp['stars','particle_index'])
+                            enr_relations['enricher_mass'][int(pid)] = []
+                            enr_relations['distance'][int(pid)] = []
+                            enr_relations['formation_dt'][int(pid)]        = []
+                            enr_relations['sne_dt'][int(pid)]              = []
+                            enr_relations['enricher_mean_z'][int(pid)]     = []
+                            enr_relations['enricher_min_z'][int(pid)]      = []
+                            enr_relations['enricher_max_z'][int(pid)]      = []
 
-                        r = ds.quan(1e-8, 'unitary')
-                        for j, p3id in enumerate(p3):
-                            p3pos = sp['stars','particle_position'][j].to('unitary')
-                            p3SN = (sp['stars','creation_time'][j] + sp['stars','dynamical_time'][j]).to('Myr')
-                            rp3p2 = np.sqrt(((p2c-p3pos)**2).sum())
-                            
-                            ray_start = p2c
-                            ray_end = p3pos
-                            ray =ds.r[ray_start:ray_end]   
+                            r = ds.quan(1e-10, 'unitary')
+                            for j, p3id in enumerate(p3):
+                                p3pos = sp['stars','particle_position'][j].to('unitary')
+                                p3SN = (sp['stars','creation_time'][j] + sp['stars','dynamical_time'][j]).to('Myr')
+                                rp3p2 = np.sqrt(((p2c-p3pos)**2).sum())
+                                
+                                ray_start = p2c
+                                ray_end = p3pos
+                                ray =ds.r[ray_start:ray_end]   
 
-                            '''
-                                # want continuous metal between p2 and p3, 
-                                # but dont want continous pop 2 metals 
-                                # (indicating the region has been enriched 
-                                # and this isnt a first-formation event)
-                            '''
-                            if np.all(ray['gas','p3_metallicity'] > 5e-5) and p3SN < ctime:
-                                if rp3p2 > r:
-                                    r = rp3p2
-                                enr_relations['enrichee_pidx'].append(int(pid))
-                                enr_relations['enricher_pidx'].append(int(p3id))
-                                enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
-                                enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
-                                enr_relations['formation_dt'][int(pid)].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
-                                enr_relations['sne_dt'][int(pid)].append(float(ctime-p3SN))
-                                enr_relations['enricher_mean_z'][int(pid)].append(float(ray['p3_metallicity'].mean()))
-                                enr_relations['enricher_min_z'][int(pid)].append(float(ray['p3_metallicity'].min()))
-                                enr_relations['enricher_max_z'][int(pid)].append(float(ray['p3_metallicity'].max()))
-                                enr_relations['distance'][int(pid)].append(float(rp3p2.to('pc')))
+                                '''
+                                    # want continuous metal between p2 and p3, 
+                                    # but dont want continous pop 2 metals 
+                                    # (indicating the region has been enriched 
+                                    # and this isnt a first-formation event)
+                                '''
+                                p3z = ray['enzo','SN_Colour'] / ray['enzo','Density'] / 0.01295
+                                if np.all(ray['enzo','SN_Colour'] / ray['enzo','Density'] / 0.01295 > 4.1e-6) and p3SN < ctime:
+                                    if rp3p2 > r:
+                                        r = rp3p2
+                                    enr_relations['enrichee_pidx'].append(int(pid))
+                                    enr_relations['enricher_pidx'].append(int(p3id))
+                                    enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
+                                    enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
+                                    enr_relations['formation_dt'][int(pid)].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
+                                    enr_relations['sne_dt'][int(pid)].append(float(ctime-p3SN))
+                                    enr_relations['enricher_mean_z'][int(pid)].append(float(p3z.mean()))
+                                    enr_relations['enricher_min_z'][int(pid)].append(float(p3z.min()))
+                                    enr_relations['enricher_max_z'][int(pid)].append(float(p3z.max()))
+                                    enr_relations['distance'][int(pid)].append(float(rp3p2.to('pc')))
 
-                                if p3id in enr_relations['p3_stats'].keys() and r: # add to this p3 star stats
-                                    enr_relations['p3_stats'][p3id]['n_enriched'] += 1
-                                    enr_relations['p3_stats'][p3id]['r_enriched'] += [float(rp3p2.to('pc'))]
-                                    enr_relations['p3_stats'][p3id]['m_enriched'] += float(ad['new_p2_stars', 'particle_mass'][idx].to('Msun'))
-                                    enr_relations['p3_stats'][p3id]['dt_snr'] += [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
-                                elif r: # create a slot for this p3 star
-                                    enr_relations['p3_stats'][p3id] = {}
-                                    enr_relations['p3_stats'][p3id]['m_enriched'] = \
-                                                    float(ad['new_p2_stars', 'particle_mass'][idx].to('Msun'))
-                                    enr_relations['p3_stats'][p3id]['mass'] =  float(sp['stars','particle_mass'][j].to('Msun'))*1e20
-                                    enr_relations['p3_stats'][p3id]['n_enriched'] = 1
-                                    enr_relations['p3_stats'][p3id]['r_enriched'] = [float(rp3p2.to('pc'))]
-                                    enr_relations['p3_stats'][p3id]['dt_snr'] = [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
+                                    if p3id in enr_relations['p3_stats'].keys() and r: # add to this p3 star stats
+                                        enr_relations['p3_stats'][p3id]['n_enriched'] += 1
+                                        enr_relations['p3_stats'][p3id]['r_enriched'] += [float(rp3p2.to('pc'))]
+                                        enr_relations['p3_stats'][p3id]['m_enriched'] += float(ad['new_p2_stars', 'particle_mass'][idx].to('Msun'))
+                                        enr_relations['p3_stats'][p3id]['dt_snr'] += [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
+                                    elif r: # create a slot for this p3 star
+                                        enr_relations['p3_stats'][p3id] = {}
+                                        enr_relations['p3_stats'][p3id]['m_enriched'] = \
+                                                        float(ad['new_p2_stars', 'particle_mass'][idx].to('Msun'))
+                                        enr_relations['p3_stats'][p3id]['mass'] =  float(sp['stars','particle_mass'][j].to('Msun'))*1e20
+                                        enr_relations['p3_stats'][p3id]['n_enriched'] = 1
+                                        enr_relations['p3_stats'][p3id]['r_enriched'] = [float(rp3p2.to('pc'))]
+                                        enr_relations['p3_stats'][p3id]['dt_snr'] = [float((ctime-sp['stars','creation_time'][j]).to("Myr"))]
                         if not r:
                             continue    
                         with open('%s/%s/%03d_p2_origin_qtys.json'%(args.output_dest, args.sim, rank),'w') as f:
                             json.dump(enr_relations, f, indent=4)
-                else:
-                    print('Region metallicity too high: %s'%dspath)
-                with open(comp_output_log, 'a') as f:
-                    f.write('%d\n'%d)
-            except OSError as oe:
-                print('[%d] Could not load/access fields "new_p2_stars" in RD%04d'%(rank,d))
-                print(oe)
+                    else:
+                        print('Region metallicity too high: %s'%dspath)
+                    with open(comp_output_log, 'a') as f:
+                        f.write('%d\n'%d)
+                except OSError as oe:
+                    print('[%d] Could not load/access fields "new_p2_stars" in RD%04d'%(rank,d))
+                    print(oe)
         else:
             print('%s does not exist?'%dspath)
 
