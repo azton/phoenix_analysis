@@ -32,44 +32,72 @@ from matplotlib import pyplot as plt
 # and in the pisn mass
 massbins = [1, 11, 20, 40, 100, 140, 200, 260, 300]
 # tokenized birth times too with 5 myr increments
-timebins = np.arange(1, 30 + 1, 15)
-
-def get_features(data, idx):
+timebins = np.arange(1, 30 + 1, 5)
+split_bound = 0.7
+def get_features(data, idx, maxt, dt, split=True, time = True):
     # from dict under the particle index, tokenize the mass and time features
     # index corresponds to time of model (-1 for last state guaranteed)
+    timebins = np.arange(1, maxt+1, dt)
     mass_tok = None
     time_tok = None
+    splits = []
+    skipped = 0
     for i, k in enumerate(data.keys()): # iterate over pidx's
         ind = idx if len(data[k]['time']) > idx else -1
         tnow = data[k]['time'][ind]
+        # print('now: %0.2f'%tnow)
+        # print(', '.join(['%0.2f'%t for t in data[k]['p3_all_ctime'][ind]]))
+        ctimes = np.array(data[k]['p3_all_ctime'][ind])
+        cmasses = np.array(data[k]['p3_all_mass'][ind])
+        cmasses = cmasses[ctimes-tnow < 5 * ind + 5] 
+        ctimes = ctimes[ctimes-tnow < 5*ind + 5]
+        try:
+            position = np.array(data[k]['region_unitary'][ind])
+        except:
+            skipped += 1
+            continue
+        splits.append('val' if np.all(position < split_bound) else 'train')
         if i==0:
-            times = [tnow - t for t in data[k]['p3_all_ctime'][ind]]
-            masses = [m*1e20 if m < 1e-5 else m for m in data[k]['p3_all_mass'][ind]] 
+            times = [tnow - t for t in ctimes]
+            masses = [m*1e20 if m < 1e-5 else m for m in cmasses] 
             mass_tok, edges = np.histogram(masses, bins=massbins)
             time_tok, edges = np.histogram(times, bins=timebins)
         else:
-            masses = [m*1e20 if m < 1e-5 else m for m in data[k]['p3_all_mass'][ind]]          
-            times = [tnow - t for t in data[k]['p3_all_ctime'][ind]]
+            masses = [m*1e20 if m < 1e-5 else m for m in cmasses]          
+            times = [tnow - t for t in ctimes]
+            str_times = ', '.join(['%0.2f'%t for t in times])
+            # print(str_times)
             m_tok, edges = np.histogram(masses, bins=massbins)
             t_tok, edges = np.histogram(times, bins=timebins)
             mass_tok = np.vstack([mass_tok, m_tok])
             time_tok = np.vstack([time_tok, t_tok])
-    return np.append(mass_tok, time_tok, axis=1)
+        print('Loaded %04d/%04d'%(i, len(data.keys())), end='\r')
+    print("Get features skipped %d samples..."%skipped)
+    splits = np.array(splits)
+    if time:
+        return np.append(mass_tok, time_tok, axis=1)[splits=='train'], np.append(mass_tok, time_tok, axis=1)[splits=='val']
+    else:
+        return mass_tok[splits=='train'], mass_tok[splits=='val']
 
-def get_labels(data, idx, fields):
+def get_labels(data, idx, fields, split=True):
     # index corresponds to time of model (-1 for last state guaranteed)
     rads = []
+    splits = []
     for k in data.keys():
         ind = idx if len(data[k]['time']) > idx else -1
+        try:
+            position = np.array(data[k]['region_unitary'][ind])
+        except:
+            continue
+        splits.append('val' if np.all(position < split_bound) else 'train')
         local = []
         for f in fields:
             local.append(data[k][f][ind])
         rads.append(local)
-    return np.array(rads)
+    splits = np.array(splits)
+    return np.array(rads)[splits == 'train'], np.array(rads)[splits == 'val']
 
 def split_dataset(X, Y):
-    xtr, xval, ytr, yval = train_test_split(X, Y, test_size=0.2, random_state=8675309)
-    xtr, xtest, ytr, ytest = train_test_split(xtr, ytr, test_size=0.125, random_state=2339479)
     
     return xtr, ytr, xval, yval, xtest, ytest
     

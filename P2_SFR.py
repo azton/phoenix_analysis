@@ -43,9 +43,6 @@ def main():
     ds = yt.load('%s/%s/RD%04d/RD%04d'%(sim_root, sim, output, output))
     ds = add_filters(ds)
     if not os.path.exists(starfile):
-        # load output, get star list. compile m*(t) and dm/dt.  save txt file that has stars and thier quantities.
-
-        ad = ds.all_data()
 
         stardict = {}
         stardict['sindex'] = []
@@ -56,19 +53,23 @@ def main():
         stardict['metallicity'] = []
         stardict['z_birth'] = []
         # stardict['lifetime'] = []
-        for stype in ['p2_stars']:
-            for i, star in enumerate(ad[stype, 'particle_mass'].to('Msun')):
-                if 'remnant' in stype:
-                    star *= 1e20
-                stardict['sindex'].append(i)
-                stardict['pid'].append(int(ad[stype,'particle_index'][i]))
-                stardict['mass'].append(float(star))
-                stardict['position'].append([float(i) for i in ad[stype,'particle_position'][i].to('unitary')])
-                stardict['birth'].append(float(ad[stype, 'creation_time'][i].to('Myr')))
-                stardict['metallicity'].append(float(ad[stype, 'metallicity_fraction'][i]))
-                stardict['z_birth'].append(float(get_redshift(ds, ad[stype, 'creation_time'][i].to('Myr'))))
-                # stardict['lifetime'].append(float(ad[stype, 'dynamical_time'][i].to('Myr')))
-
+        ng = len(ds.index.grids)
+        for gnum, ad in enumerate(ds.index.grids):
+        # load output, get star list. compile m*(t) and dm/dt.  save txt file that has stars and thier quantities.
+            if ad.Level < 3: continue
+            for stype in ['p2_stars']:
+                for i, star in enumerate(ad[stype, 'particle_mass'].to('Msun')):
+                    if 'remnant' in stype:
+                        star *= 1e20
+                    stardict['sindex'].append(i)
+                    stardict['pid'].append(int(ad[stype,'particle_index'][i]))
+                    stardict['mass'].append(float(star))
+                    stardict['position'].append([float(i) for i in ad[stype,'particle_position'][i].to('unitary')])
+                    stardict['birth'].append(float(ad[stype, 'creation_time'][i].to('Myr')))
+                    stardict['metallicity'].append(float(ad[stype, 'metallicity_fraction'][i]))
+                    stardict['z_birth'].append(float(get_redshift(ds, ad[stype, 'creation_time'][i].to('Myr'))))
+                    # stardict['lifetime'].append(float(ad[stype, 'dynamical_time'][i].to('Myr')))
+            print("\|/-%06d/%06d-\|/"%(gnum, ng), end='\r')
         os.makedirs(sim, exist_ok=True)
         with open(starfile, 'w') as f:
             json.dump(stardict, f, indent=4)
