@@ -148,14 +148,14 @@ def main():
             for l in f:
                 if l.strip() != '#':
                     comp_outs.append(int(l))
-        print("Previously completed: ", sorted(comp_outs))
+        # print("Previously completed: ", sorted(comp_outs))
         if d in comp_outs:
             print('[%d] Skipping previously done RD%04d'%(rank,d))
             continue
 
         dspath = '%s/%s/RD%04d/RD%04d'%(simpath, sim, d, d)
         rspath = '%s/%s/rockstar_halos/halos_RD%04d.0.bin'%(simpath, sim, d)
-        print("Checking %s"%dspath)
+        # print("Checking %s"%dspath)
         if os.path.exists(dspath) and os.path.exists(rspath): # local ds's are multiples of 5
             ds = yt.load(dspath)
             rsds = yt.load(rspath)
@@ -171,9 +171,11 @@ def main():
                     for idx, p2c in enumerate(ad['new_p2_stars','particle_position'].to('unitary')):
                         pid = int(ad['new_p2_stars','particle_index'][idx])
                         ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
-                        p2r = r
-                        sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
-                        if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_volume']).sum()/(sp['gas','cell_volume'].sum())).to('Zsun') <= 3.1e-6: # only analyze if region seems to not have ongoing prior p2 star formation
+                        ix = np.argmin(ad['gas','x'])
+                        # p2r = r/3.0
+                        # sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
+                        sp = ds.r[p2c[0], p2c[1], p2c[2]]
+                        if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_mass']).sum()/(sp['gas','cell_mass'].sum())).to('Zsun') <= 3.1e-6: # only analyze if region seems to not have ongoing prior p2 star formation
                             print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
                             r = ds.quan(200, 'kpccm').to('unitary')
                             sp = ds.sphere(p2c, r)
@@ -234,8 +236,6 @@ def main():
                             continue    
                         with open('%s/%s/%03d_p2_origin_qtys.json'%(args.output_dest, args.sim, rank),'w') as f:
                             json.dump(enr_relations, f, indent=4)
-                    else:
-                        print('Region metallicity too high: %s'%dspath)
                     with open(comp_output_log, 'a') as f:
                         f.write('%d\n'%d)
                 except OSError as oe:
