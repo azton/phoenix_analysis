@@ -10,7 +10,8 @@
         
     
 '''
-
+import matplotlib
+matplotlib.use("Agg")
 import yt, json, h5py, os
 from mpi4py import MPI
 import numpy as np

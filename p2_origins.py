@@ -125,9 +125,10 @@ def main():
         enr_relations = {}
 
         enr_relations['enrichee_pidx']      = []
+        enr_relations['enrichee_metal']     = []
+        # enr_relations['enrichee_mass']     = []
         enr_relations['enricher_pidx']      = []
         enr_relations['enricher_mass']      = {} # list of enriching masses keyed by the pid they enriched
-        enr_relations['enrichee_metal']     = []
         enr_relations['formation_dt']       = {}
         enr_relations['sne_dt']             = {}
         enr_relations['enricher_mean_z']    = {}
@@ -171,11 +172,10 @@ def main():
                     for idx, p2c in enumerate(ad['new_p2_stars','particle_position'].to('unitary')):
                         pid = int(ad['new_p2_stars','particle_index'][idx])
                         ctime = ad['new_p2_stars','creation_time'][idx].to('Myr')
-                        ix = np.argmin(ad['gas','x'])
                         # p2r = r/3.0
                         # sp = ds.sphere(p2c, p2r) # sphere large enough to project a region with width "d"
                         sp = ds.r[p2c[0], p2c[1], p2c[2]]
-                        if ((sp['enzo','Metal_Density']/sp['enzo','Density']*sp['gas','cell_mass']).sum()/(sp['gas','cell_mass'].sum())).to('Zsun') <= 3.1e-6: # only analyze if region seems to not have ongoing prior p2 star formation
+                        if sp['gas','metallicity'].mean() <= 3.1e-6: # only analyze if region seems to not have ongoing prior p2 star formation
                             print('Processing particle %d with age %f Myr in RD%04d'%(pid, ad['new_p2_stars','age'][idx].to('Myr'), d))
                             r = ds.quan(200, 'kpccm').to('unitary')
                             sp = ds.sphere(p2c, r)
@@ -198,6 +198,9 @@ def main():
                                 ray_end = p3pos
                                 ray =ds.r[ray_start:ray_end]   
 
+                                enr_relations['enrichee_pidx'].append(int(pid))
+                                enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
+
                                 '''
                                     # want continuous metal between p2 and p3, 
                                     # but dont want continous pop 2 metals 
@@ -205,13 +208,11 @@ def main():
                                     # and this isnt a first-formation event)
                                 '''
                                 p3z = ray['enzo','SN_Colour'] / ray['enzo','Density'] / 0.01295
-                                if np.all(ray['enzo','SN_Colour'] / ray['enzo','Density'] / 0.01295 > 4.1e-6) and p3SN < ctime:
+                                if np.all(ray['enzo','SN_Colour'] / ray['enzo','Density'] / 0.01295 > 3.1e-6) and p3SN < ctime:
                                     if rp3p2 > r:
                                         r = rp3p2
-                                    enr_relations['enrichee_pidx'].append(int(pid))
                                     enr_relations['enricher_pidx'].append(int(p3id))
                                     enr_relations['enricher_mass'][int(pid)].append(float(sp['stars','particle_mass'][j].to('Msun'))*1e20)
-                                    enr_relations['enrichee_metal'].append(float(ad['new_p2_stars','metallicity_fraction'][idx].to('Zsun')))
                                     enr_relations['formation_dt'][int(pid)].append(float((ctime-sp['stars','creation_time'][j]).to("Myr")))
                                     enr_relations['sne_dt'][int(pid)].append(float(ctime-p3SN))
                                     enr_relations['enricher_mean_z'][int(pid)].append(float(p3z.mean()))
